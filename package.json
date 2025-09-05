@@ -1,0 +1,28 @@
+{
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "name": "go_game",
+  "version": "1.0.0",
+  "description": "HW1 for Web Security course",
+  "main": "server.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZhitaoGan/Go_Game.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ZhitaoGan/Go_Game/issues"
+  },
+  "homepage": "https://github.com/ZhitaoGan/Go_Game#readme"
+}
