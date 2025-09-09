@@ -1,0 +1,2167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Five-in-a-Row Game</title>
+    <!-- 
+        Five-in-a-Row Game Client
+        Supports both local and online multiplayer modes
+        Features: Real-time gameplay, reconnection, game state persistence
+    -->
+    <style>
+        /* ==================== GLOBAL STYLES ==================== */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #gameContainer {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        #gameModeSelector {
+            margin-bottom: 20px;
+        }
+        
+        .mode-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0 10px;
+        }
+        
+        .mode-button:hover {
+            background-color: #45a049;
+        }
+        
+        .mode-button.active {
+            background-color: #2E7D32;
+        }
+        
+        #gameInfo {
+            margin-bottom: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        #currentPlayer {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        #gameStatus {
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .game-board {
+            position: relative;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        
+        #board {
+            border: 2px solid #333;
+            cursor: pointer;
+        }
+        
+        .controls {
+            margin-top: 20px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0 10px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 24px;
+            text-align: center;
+            z-index: 10;
+            display: none;
+        }
+        
+        .player-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .player {
+            padding: 8px 16px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .player.black {
+            background-color: #333;
+            color: white;
+        }
+        
+        .player.white {
+            background-color: #f0f0f0;
+            color: #333;
+            border: 2px solid #333;
+        }
+        
+        .player.current {
+            box-shadow: 0 0 10px #4CAF50;
+        }
+        
+        /* ==================== ONLINE GAME STYLES ==================== */
+        
+        #playerProfiles {
+            position: relative;
+            width: 600px;
+            height: 60px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .player-profile {
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            min-width: 120px;
+            text-align: center;
+            display: none;
+        }
+        
+        .player-profile.top-left {
+            order: 1;
+        }
+        
+        .player-profile.bottom-right {
+            order: 2;
+        }
+        
+        .waiting-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 165, 0, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 18px;
+            z-index: 10;
+            display: none;
+        }
+        
+        .new-game-waiting-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(33, 150, 243, 0.9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 18px;
+            z-index: 10;
+            display: none;
+        }
+        
+        .game-over-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 24px;
+            text-align: center;
+            z-index: 15;
+            display: none;
+        }
+        
+        .start-over-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 15px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .start-over-button:hover {
+            background-color: #45a049;
+        }
+        
+        .start-over-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        #usernameModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        #usernameDialog {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .username-input {
+            width: 250px;
+            padding: 12px;
+            margin: 15px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        .username-input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        #usernameSubmit {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        #usernameSubmit:hover {
+            background-color: #45a049;
+        }
+        
+        #newGameModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        #newGameDialog {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+        }
+        
+        #newGameMessage {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>Five-in-a-Row Game</h1>
+        
+        <div id="gameModeSelector">
+            <button id="localModeBtn" class="mode-button active" onclick="switchToLocalMode()">Local Play</button>
+            <button id="onlineModeBtn" class="mode-button" onclick="switchToOnlineMode()">Online Play</button>
+        </div>
+        
+        <div id="gameInfo">
+            <div id="currentPlayer">Current Player: <span id="currentPlayerName">Black</span></div>
+            <div id="gameStatus">Click on the board to make your move</div>
+        </div>
+        
+        <div class="player-info" id="localPlayerInfo">
+            <div id="player1" class="player black current">Player 1 (Black)</div>
+            <div id="player2" class="player white">Player 2 (White)</div>
+        </div>
+        
+        <div id="playerProfiles" style="display: none;">
+            <div id="player1Profile" class="player-profile top-left"></div>
+            <div id="player2Profile" class="player-profile bottom-right"></div>
+        </div>
+        
+        <div class="game-board">
+            <canvas id="board" width="600" height="600"></canvas>
+            <div id="waitingMessage" class="waiting-message" style="display: none;">Waiting for opponent...</div>
+            <div id="newGameWaitingMessage" class="new-game-waiting-message" style="display: none;">Waiting for opponent's response...</div>
+            <div id="gameOverMessage" class="game-over-message" style="display: none;">
+                <div id="winnerText"></div>
+                <button id="startOverButton" class="start-over-button">Start Over</button>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="newGameBtn" onclick="newGame()">New Game</button>
+            <div id="newGameInfo" style="display: none; margin-top: 10px; font-size: 14px; color: #666;">
+                <span id="newGameText">Enter your name to start a new online game</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Username Modal for Online Play -->
+    <div id="usernameModal">
+        <div id="usernameDialog">
+            <h3>Enter Your Name to Play Online</h3>
+            <input type="text" id="usernameInput" class="username-input" placeholder="Enter your name" maxlength="20">
+            <br>
+            <button id="usernameSubmit">Join Game</button>
+        </div>
+    </div>
+
+    <!-- New Game Confirmation Modal -->
+    <div id="newGameModal">
+        <div id="newGameDialog">
+            <h3>New Game Request</h3>
+            <p id="newGameMessage">Your opponent wants to start a new game. Do you want to start over?</p>
+            <div style="margin-top: 20px;">
+                <button id="acceptNewGame" class="mode-button" style="background-color: #4CAF50; margin-right: 10px;">Yes, Start New Game</button>
+                <button id="rejectNewGame" class="mode-button" style="background-color: #f44336;">No, Continue Current Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.IO will be loaded dynamically when needed -->
+    <script>
+        // ==================== GAME CONFIGURATION ====================
+        const BOARD_SIZE = 19;  // 19x19 Go board
+        const CELL_SIZE = 30;   // Size of each cell in pixels
+        const WIN_LENGTH = 5;   // Number of stones in a row to win
+        
+        // ==================== GAME STATE VARIABLES ====================
+        // Core game state
+        let board = [];
+        let currentPlayer = 'black';
+        let gameOver = false;
+        let winner = null;
+        let moveCount = 0;
+        
+        // Online game state variables
+        let gameId = null;              // Current game ID
+        let myPlayer = null;            // Player's color ('black' or 'white')
+        let socket = null;              // Socket.IO connection
+        let playerName = null;          // Player's username
+        let opponentName = null;        // Opponent's username
+        let isWaitingForOpponent = false; // Waiting for opponent to join
+        let hasClickedStartOver = false;  // Start over button state
+        // Note: playerStats variable removed as it's not used
+        let gameMode = 'local';         // Current game mode ('local' or 'online')
+        let isAutoReconnecting = false; // Flag to prevent username modal during auto-reconnection
+        
+        // ==================== REFRESH DETECTION ====================
+        /**
+         * Detect if page is being refreshed vs closed
+         * Used to preserve game state on refresh
+         */
+        function isPageRefresh() {
+            // Check if the page is being refreshed by looking at performance.navigation
+            if (performance.navigation) {
+                return performance.navigation.type === performance.navigation.TYPE_RELOAD;
+            }
+            // Fallback for newer browsers
+            if (performance.getEntriesByType) {
+                const navigationEntries = performance.getEntriesByType('navigation');
+                if (navigationEntries.length > 0) {
+                    return navigationEntries[0].type === 'reload';
+                }
+            }
+            return false;
+        }
+        
+        function markAsRefresh() {
+            sessionStorage.setItem('goGameIsRefresh', 'true');
+            // Clear the flag after a longer delay to allow for page load
+            setTimeout(() => {
+                sessionStorage.removeItem('goGameIsRefresh');
+            }, 5000);
+        }
+        
+        function isMarkedAsRefresh() {
+            return sessionStorage.getItem('goGameIsRefresh') === 'true';
+        }
+        
+        // ==================== GAME STATE PERSISTENCE ====================
+        /**
+         * Save current game state to sessionStorage
+         * Persists across page refreshes but clears when browser closes
+         */
+        function saveGameState() {
+            if (gameMode === 'online' && playerName && gameId) {
+                const gameState = {
+                    mode: gameMode,
+                    playerName: playerName,
+                    gameId: gameId,
+                    myPlayer: myPlayer,
+                    opponentName: opponentName,
+                    board: board,
+                    currentPlayer: currentPlayer,
+                    gameOver: gameOver,
+                    winner: winner,
+                    moveCount: moveCount,
+                    timestamp: Date.now()
+                };
+                sessionStorage.setItem('goGameState', JSON.stringify(gameState));
+                console.log('Game state saved to sessionStorage:', gameState);
+            }
+        }
+        
+        function saveUserSession() {
+            if (playerName) {
+                const sessionData = {
+                    playerName: playerName,
+                    lastLogin: new Date().toISOString()
+                };
+                sessionStorage.setItem('goGameSession', JSON.stringify(sessionData));
+                console.log('User session saved to sessionStorage:', sessionData);
+            }
+        }
+        
+        function loadUserSession() {
+            try {
+                const saved = sessionStorage.getItem('goGameSession');
+                console.log('Loading user session from sessionStorage:', saved);
+                if (saved) {
+                    const sessionData = JSON.parse(saved);
+                    console.log('User session loaded:', sessionData);
+                    return sessionData;
+                }
+            } catch (error) {
+                console.error('Error loading user session:', error);
+            }
+            console.log('No user session found');
+            return null;
+        }
+        
+        function clearUserSession() {
+            sessionStorage.removeItem('goGameSession');
+            console.log('User session cleared');
+        }
+        
+        function loadGameState() {
+            try {
+                const saved = sessionStorage.getItem('goGameState');
+                if (saved) {
+                    const gameState = JSON.parse(saved);
+                    console.log('Game state loaded from sessionStorage:', gameState);
+                    return gameState;
+                }
+            } catch (error) {
+                console.error('Error loading game state:', error);
+            }
+            return null;
+        }
+        
+        function clearGameState() {
+            sessionStorage.removeItem('goGameState');
+            console.log('Game state cleared');
+        }
+        
+        function clearAllSessionData() {
+            sessionStorage.removeItem('goGameState');
+            sessionStorage.removeItem('goGameSession');
+            console.log('All session data cleared');
+        }
+        
+        // ==================== CANVAS SETUP ====================
+        const canvas = document.getElementById('board');
+        const ctx = canvas.getContext('2d');
+        
+        // Calculate margin to center the grid on the canvas
+        const totalGridWidth = (BOARD_SIZE - 1) * CELL_SIZE;
+        const margin = (canvas.width - totalGridWidth) / 2;
+        
+        // ==================== SOCKET.IO INITIALIZATION ====================
+        /**
+         * Dynamically load Socket.IO library
+         * @returns {Promise} Resolves when Socket.IO is loaded
+         */
+        function loadSocketIO() {
+            return new Promise((resolve, reject) => {
+                if (typeof io !== 'undefined') {
+                    resolve();
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = '/socket.io/socket.io.js';
+                script.onload = () => {
+                    console.log('Socket.IO loaded successfully');
+                    resolve();
+                };
+                script.onerror = () => {
+                    console.error('Failed to load Socket.IO');
+                    reject(new Error('Socket.IO failed to load'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        /**
+         * Initialize socket connection for online mode
+         * Sets up Socket.IO connection with proper configuration
+         */
+        async function initializeSocket() {
+            try {
+                await loadSocketIO();
+                socket = io({
+                    autoConnect: false,  // Don't auto-connect
+                    reconnection: false  // Disable automatic reconnection
+                });
+                setupSocketHandlers();
+            } catch (error) {
+                console.error('Failed to initialize socket:', error);
+                showError('Failed to load online features. Please check if the server is running.');
+            }
+        }
+        
+        // ==================== SOCKET EVENT HANDLERS ====================
+        /**
+         * Set up all Socket.IO event handlers for online mode
+         * Handles connection, game events, and error states
+         */
+        function setupSocketHandlers() {
+            socket.on('connect', () => {
+                console.log('Connected to server:', socket.id);
+                if (gameMode === 'online') {
+                    // Don't automatically show username form - let the calling code handle it
+                    console.log('Socket connected in online mode');
+                }
+            });
+
+            socket.on('connect_error', (error) => {
+                console.log('Connection error:', error.message);
+                if (gameMode === 'online') {
+                    console.log('Server connection failed, clearing saved game state');
+                    clearAllSessionData();
+                    showError('Cannot connect to server. Please check if the server is running.');
+                }
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('Disconnected from server:', reason);
+                if (gameMode === 'online') {
+                    // Check if this is a server shutdown (not just a network issue)
+                    if (reason === 'io server disconnect' || reason === 'transport close') {
+                        console.log('Server appears to have shut down, clearing saved game state');
+                        clearAllSessionData();
+                    }
+                    showError('Disconnected from server: ' + reason);
+                }
+            });
+
+            socket.on('usernameAccepted', (data) => {
+                console.log('Username accepted:', data);
+                
+                // Clear timeout
+                if (window.usernameTimeout) {
+                    clearTimeout(window.usernameTimeout);
+                    window.usernameTimeout = null;
+                }
+                
+                playerName = data.playerName;
+                
+                // Save user session for future visits
+                saveUserSession();
+                
+                // Reset the button state
+                const submitButton = document.getElementById('usernameSubmit');
+                submitButton.disabled = false;
+                submitButton.textContent = 'Join Game';
+                
+                hideUsernameForm();
+                
+                console.log('Username accepted, ready to join game');
+                
+                // Check if player has an existing game
+                if (data.hasExistingGame && data.gameId) {
+                    console.log('Player has existing game, attempting reconnection:', data.gameId);
+                    gameId = data.gameId;
+                    updateStatus('Reconnecting to your existing game...');
+                    socket.emit('reconnectToGame', { gameId: gameId });
+                } else if (isAutoReconnecting && gameId) {
+                    console.log('Attempting to reconnect to saved game:', gameId);
+                    updateStatus('Attempting to reconnect to your game...');
+                    socket.emit('reconnectToGame', { gameId: gameId });
+                } else if (gameId && board && board.some(row => row.some(cell => cell !== null))) {
+                    // We have a restored board state, attempt reconnection
+                    console.log('Attempting to reconnect with restored board state:', gameId);
+                    updateStatus('Reconnecting to your game with restored board...');
+                    socket.emit('reconnectToGame', { gameId: gameId });
+                } else {
+                    updateStatus(`Welcome ${playerName}! Looking for an opponent...`);
+                    // Automatically join game after username is accepted
+                    socket.emit('joinGame', { playerName: playerName });
+                }
+            });
+
+            socket.on('usernameRejected', (data) => {
+                console.log('Username rejected:', data.message);
+                
+                // Clear timeout
+                if (window.usernameTimeout) {
+                    clearTimeout(window.usernameTimeout);
+                    window.usernameTimeout = null;
+                }
+                
+                // Check if this is because username is already taken by connected player
+                if (data.message.includes('already taken')) {
+                    console.log('Username already taken by connected player');
+                    showError('This username is already in use. Please choose a different name.');
+                } else {
+                    showError('Username rejected: ' + data.message);
+                }
+                
+                // Reset the button state
+                const submitButton = document.getElementById('usernameSubmit');
+                submitButton.disabled = false;
+                submitButton.textContent = 'Join Game';
+                
+                // Keep the modal open so user can try again
+                document.getElementById('usernameInput').focus();
+            });
+
+            socket.on('waitingForOpponent', (data) => {
+                console.log('Waiting for opponent...', data);
+                // Only show waiting message if we're not already in a game
+                if (!gameId) {
+                    isWaitingForOpponent = true;
+                    showWaitingMessage();
+                    updateStatus(`Waiting for opponent... (${data.playerCount || 1} player(s) waiting)`);
+                }
+            });
+
+            socket.on('gameStarted', (data) => {
+                console.log('Game started!', data);
+                gameId = data.gameId;
+                myPlayer = data.player;
+                playerName = data.playerName;
+                opponentName = data.opponentName;
+                
+                // Initialize game state from server
+                if (data.gameState) {
+                    board = data.gameState.board;
+                    currentPlayer = data.gameState.currentPlayer;
+                    gameOver = data.gameState.gameOver;
+                    winner = data.gameState.winner;
+                    moveCount = data.gameState.moveCount || 0;
+                }
+                
+                hideWaitingMessage();
+                hideNewGameInfo();
+                showPlayerProfiles(playerName, opponentName, myPlayer);
+                
+                // Update UI elements
+                updateCurrentPlayer();
+                updatePlayerInfo();
+                updateGameStatus();
+                
+                updateStatus(`Game started! You are ${myPlayer.toUpperCase()}`);
+                redrawBoard();
+                
+                // Save game state for reconnection
+                saveGameState();
+            });
+
+            socket.on('gameUpdate', (data) => {
+                console.log('Game update received:', data);
+                board = data.board;
+                currentPlayer = data.currentPlayer;
+                gameOver = data.gameOver;
+                winner = data.winner;
+                moveCount = data.moveCount || 0;
+                
+                // Update UI elements
+                updateCurrentPlayer();
+                updatePlayerInfo();
+                updateGameStatus();
+                
+                redrawBoard();
+                
+                if (gameOver) {
+                    showGameOverMessage();
+                }
+            });
+
+            socket.on('moveConfirmed', (data) => {
+                console.log('Move confirmed:', data);
+                updateStatus();
+            });
+
+            socket.on('moveError', (data) => {
+                console.log('Move error:', data.message);
+                showError('Move rejected: ' + data.message);
+            });
+
+            socket.on('gameEnded', (data) => {
+                console.log('Game ended:', data);
+                gameOver = true;
+                winner = data.winner;
+                
+                // Update the board state from server
+                if (data.gameState) {
+                    board = data.gameState.board;
+                    currentPlayer = data.gameState.currentPlayer;
+                }
+                
+                // Redraw the board with final state
+                redrawBoard();
+                
+                if (data.winner === myPlayer) {
+                    updateStatus(`🎉 You WIN! Congratulations!`);
+                } else if (data.winner === 'draw') {
+                    updateStatus(`🤝 It's a draw!`);
+                } else {
+                    updateStatus(`😞 You lose. Better luck next time!`);
+                }
+                
+                showGameOverMessage();
+            });
+
+            socket.on('opponentLeft', (data) => {
+                console.log('Opponent left:', data.message);
+                updateStatus('Opponent left the game');
+                gameOver = true;
+                showError(data.message);
+            });
+
+            socket.on('startOverRequested', (data) => {
+                console.log('Start over requested:', data.message);
+                updateStartOverButton();
+                showInfo(data.message);
+            });
+
+            socket.on('gameRestarted', (data) => {
+                console.log('Game restarted!', data);
+                hideGameOverMessage();
+                resetGameState();
+                
+                // Update board from server state
+                if (data.board) {
+                    board = data.board;
+                }
+                if (data.currentPlayer) {
+                    currentPlayer = data.currentPlayer;
+                }
+                if (data.gameOver !== undefined) {
+                    gameOver = data.gameOver;
+                }
+                
+                // Reset the start over button to its initial state
+                const startOverButton = document.getElementById('startOverButton');
+                startOverButton.textContent = 'Start Over';
+                startOverButton.disabled = false;
+                
+                updateStatus(`Game restarted! You are ${myPlayer.toUpperCase()}`);
+                redrawBoard();
+            });
+
+            // Note: playerStats handler removed as statistics are not implemented
+
+            socket.on('joinGameError', (data) => {
+                console.log('Join game error:', data.message);
+                showError('Error joining game: ' + data.message);
+            });
+
+            socket.on('startOverError', (data) => {
+                console.log('Start over error:', data.message);
+                showError('Error: ' + data.message);
+            });
+
+            socket.on('gameStateError', (data) => {
+                console.log('Game state error:', data.message);
+                showError('Error: ' + data.message);
+            });
+
+            // Handle reconnection events
+            socket.on('reconnectedToGame', (data) => {
+                console.log('Reconnected to game:', data);
+                console.log('Previous state:', { gameId, myPlayer, playerName, opponentName });
+                gameId = data.gameId;
+                myPlayer = data.player;
+                playerName = data.playerName;
+                opponentName = data.opponentName;
+                console.log('New state:', { gameId, myPlayer, playerName, opponentName });
+                
+                // Check if we just restored from refresh - if so, don't override the board
+                const wasRestoredFromRefresh = isMarkedAsRefresh() && board && board.some(row => row.some(cell => cell !== null));
+                
+                if (!wasRestoredFromRefresh) {
+                    // Initialize game state from server (only if not restored from refresh)
+                    if (data.gameState) {
+                        board = data.gameState.board;
+                        currentPlayer = data.gameState.currentPlayer;
+                        gameOver = data.gameState.gameOver;
+                        winner = data.gameState.winner;
+                        moveCount = data.gameState.moveCount || 0;
+                    }
+                } else {
+                    console.log('Keeping restored board state from refresh');
+                }
+                
+                // Update UI to show we're back in the game
+                hideWaitingMessage();
+                hideNewGameInfo();
+                showPlayerProfiles(playerName, opponentName, myPlayer);
+                
+                // Update UI elements
+                updateCurrentPlayer();
+                updatePlayerInfo();
+                updateGameStatus();
+                
+                updateStatus(`Reconnected! Board restored. You are ${myPlayer.toUpperCase()}`);
+                redrawBoard();
+                
+                // Save the restored state
+                saveGameState();
+                
+                // Clear the auto-reconnecting flag
+                isAutoReconnecting = false;
+            });
+
+            socket.on('reconnectError', (data) => {
+                console.log('Reconnection error:', data.message);
+                isAutoReconnecting = false;
+                
+                // If server indicates to clear session, clear all session data
+                if (data.clearSession) {
+                    console.log('Server requested session clear, clearing all session data');
+                    clearAllSessionData();
+                    
+                    // Check if we have a restored board state - if so, don't show username modal
+                    const hasRestoredBoard = board && board.some(row => row.some(cell => cell !== null));
+                    
+                    if (hasRestoredBoard) {
+                        console.log('Have restored board state, not showing username modal');
+                        // Keep the restored board and player info, just clear the game connection
+                        // Reset game connection variables but keep the board
+                        gameId = null;
+                        myPlayer = null;
+                        opponentName = null;
+                        updateStatus('Game session expired, but board restored. Click "New Game" to find another opponent.');
+                        showNewGameInfo();
+                    } else {
+                        // Reset to new user state
+                        playerName = null;
+                        gameId = null;
+                        myPlayer = null;
+                        opponentName = null;
+                        // Show username form for new user
+                        showUsernameForm();
+                        updateStatus('Session expired. Please enter your username to start a new game.');
+                    }
+                } else {
+                    clearGameState();
+                    showError('Reconnection failed: ' + data.message);
+                    updateStatus('Reconnection failed. Please try again.');
+                }
+            });
+
+            // New game request handlers
+            socket.on('newGameRequested', (data) => {
+                console.log('New game requested:', data.message);
+                showNewGameConfirmation(data.message, data.requestingPlayer);
+            });
+
+            socket.on('newGameRequestSent', (data) => {
+                console.log('New game request sent:', data.message);
+                showNewGameWaitingMessage();
+                showInfo(data.message);
+            });
+
+            socket.on('newGameStarted', (data) => {
+                console.log('New game started!', data);
+                hideNewGameConfirmation();
+                hideNewGameWaitingMessage();
+                hideGameOverMessage();
+                resetGameState();
+                
+                // Update board from server state
+                if (data.gameState) {
+                    board = data.gameState.board;
+                    currentPlayer = data.gameState.currentPlayer;
+                    gameOver = data.gameState.gameOver;
+                    winner = data.gameState.winner;
+                    moveCount = data.gameState.moveCount || 0;
+                }
+                
+                updateStatus('New game started! You are ' + myPlayer.toUpperCase());
+                redrawBoard();
+            });
+
+            socket.on('newGameRejected', (data) => {
+                console.log('New game rejected:', data.message);
+                hideNewGameWaitingMessage();
+                showInfo(data.message);
+            });
+
+            socket.on('newGameResponseSent', (data) => {
+                console.log('New game response sent:', data.message);
+                hideNewGameWaitingMessage();
+                showInfo(data.message);
+            });
+
+            socket.on('newGameError', (data) => {
+                console.log('New game error:', data.message);
+                hideNewGameWaitingMessage();
+                showError('Error: ' + data.message);
+            });
+            
+            // Handle opponent disconnect notification
+            socket.on('opponentDisconnected', (data) => {
+                console.log('Opponent disconnected:', data.message);
+                
+                if (data.gameFinished) {
+                    // Game is finished due to opponent disconnect
+                    gameOver = true;
+                    winner = 'disconnect';
+                    
+                    // Update the board with final state if provided
+                    if (data.gameState) {
+                        board = data.gameState.board;
+                        currentPlayer = data.gameState.currentPlayer;
+                    }
+                    
+                    // Show game over message
+                    showGameOverMessage();
+                    
+                    // Update status
+                    updateStatus('Opponent left the game. Game finished.');
+                    
+                    // Show error message
+                    showError(data.message);
+                    
+                    // Clear the game state since opponent left
+                    clearGameState();
+                    
+                    // Reset game variables
+                    gameId = null;
+                    myPlayer = null;
+                    opponentName = null;
+                    isWaitingForOpponent = false;
+                    hasClickedStartOver = false;
+                    
+                    // Hide player profiles and show new game info
+                    document.getElementById('playerProfiles').style.display = 'none';
+                    showNewGameInfo();
+                    
+                    // Update the new game text to show option to find another player
+                    document.getElementById('newGameText').textContent = 'Opponent left. Click "New Game" to find another player.';
+                    
+                } else {
+                    // Regular disconnect (shouldn't happen with new logic, but keeping for safety)
+                    updateStatus('Opponent has left the game');
+                    showError(data.message);
+                    
+                    // Clear the game state since opponent left
+                    clearGameState();
+                    
+                    // Reset game variables to allow new game
+                    gameId = null;
+                    myPlayer = null;
+                    opponentName = null;
+                    isWaitingForOpponent = false;
+                    hasClickedStartOver = false;
+                    
+                    // Hide player profiles and show new game info
+                    document.getElementById('playerProfiles').style.display = 'none';
+                    showNewGameInfo();
+                    
+                    // Reset the board for a fresh start
+                    initGame();
+                    
+                    // Show option to start a new game
+                    updateStatus('Opponent left. You can start a new game or wait for another player.');
+                }
+            });
+        }
+        
+        // ==================== MODE SWITCHING ====================
+        /**
+         * Switch to local play mode
+         * Disconnects from server and resets to local game state
+         */
+        function switchToLocalMode() {
+            gameMode = 'local';
+            document.getElementById('localModeBtn').classList.add('active');
+            document.getElementById('onlineModeBtn').classList.remove('active');
+            document.getElementById('localPlayerInfo').style.display = 'flex';
+            document.getElementById('playerProfiles').style.display = 'none';
+            hideWaitingMessage();
+            hideGameOverMessage();
+            hideNewGameInfo();
+            resetGameState();
+            initGame();
+            
+            // Clear saved game state when switching to local mode
+            clearGameState();
+            
+            // Disconnect socket when switching to local mode
+            if (socket && socket.connected) {
+                socket.disconnect();
+            }
+        }
+        
+        /**
+         * Switch to online play mode
+         * Initializes socket connection and attempts to restore saved state
+         */
+        async function switchToOnlineMode() {
+            gameMode = 'online';
+            document.getElementById('onlineModeBtn').classList.add('active');
+            document.getElementById('localModeBtn').classList.remove('active');
+            document.getElementById('localPlayerInfo').style.display = 'none';
+            document.getElementById('playerProfiles').style.display = 'flex';
+            hideWaitingMessage();
+            hideGameOverMessage();
+            resetGameState();
+            initGame();
+            
+            try {
+                // Only connect to socket when switching to online mode
+                if (!socket) {
+                    await initializeSocket();
+                }
+                
+                if (socket && !socket.connected) {
+                    socket.connect();
+                }
+                
+                if (socket && socket.connected) {
+                    // Add a small delay to ensure socket is fully ready
+                    setTimeout(() => {
+                        // Check for saved game state and attempt reconnection
+                        const savedState = loadGameState();
+                        const userSession = loadUserSession();
+                        
+                        if (savedState && savedState.mode === 'online' && savedState.playerName && savedState.gameId) {
+                            console.log('Found saved game state, attempting reconnection...', savedState);
+                            // Don't set isAutoReconnecting here as it's already set in the load event
+                            playerName = savedState.playerName;
+                            gameId = savedState.gameId;
+                            myPlayer = savedState.myPlayer;
+                            opponentName = savedState.opponentName;
+                            
+                            console.log('Setting up reconnection with:', { playerName, gameId, myPlayer, opponentName });
+                            // Set username and attempt reconnection
+                            socket.emit('setUsername', { username: playerName });
+                            // The usernameAccepted handler will trigger the reconnection attempt
+                        } else if (userSession && userSession.playerName) {
+                            console.log('Found saved user session, using saved username:', userSession.playerName);
+                            // Use saved username and attempt to join a new game
+                            playerName = userSession.playerName;
+                            socket.emit('setUsername', { username: playerName });
+                        } else {
+                            // No saved state, show username form (only if not auto-reconnecting)
+                            if (!isAutoReconnecting) {
+                                console.log('No saved session found, showing username form');
+                                showUsernameForm();
+                            } else {
+                                console.log('Auto-reconnecting, not showing username form');
+                            }
+                        }
+                    }, 100); // Small delay to ensure socket is fully ready
+                } else {
+                    // Socket not connected, wait for connection
+                    if (socket) {
+                        socket.on('connect', () => {
+                            console.log('Socket connected after waiting, proceeding with online mode setup');
+                            // Check for saved game state and attempt reconnection
+                            const savedState = loadGameState();
+                            const userSession = loadUserSession();
+                            
+                            if (savedState && savedState.mode === 'online' && savedState.playerName && savedState.gameId) {
+                                console.log('Found saved game state, attempting reconnection...', savedState);
+                                playerName = savedState.playerName;
+                                gameId = savedState.gameId;
+                                myPlayer = savedState.myPlayer;
+                                opponentName = savedState.opponentName;
+                                
+                                console.log('Setting up reconnection with:', { playerName, gameId, myPlayer, opponentName });
+                                socket.emit('setUsername', { username: playerName });
+                            } else if (userSession && userSession.playerName) {
+                                console.log('Found saved user session, using saved username:', userSession.playerName);
+                                playerName = userSession.playerName;
+                                socket.emit('setUsername', { username: playerName });
+                            } else {
+                                // No saved state, show username form
+                                if (!isAutoReconnecting) {
+                                    console.log('No saved session found, showing username form');
+                                    showUsernameForm();
+                                }
+                            }
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to switch to online mode:', error);
+                showError('Failed to switch to online mode. Please check if the server is running.');
+            }
+        }
+        
+        // ==================== GAME INITIALIZATION ====================
+        /**
+         * Initialize a new game with empty board
+         * Resets all game state variables
+         */
+        function initGame() {
+            // Initialize empty board
+            board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+            currentPlayer = 'black';
+            gameOver = false;
+            winner = null;
+            moveCount = 0;
+            
+            // Update UI
+            updateCurrentPlayer();
+            updateGameStatus();
+            updatePlayerInfo();
+            hideGameOverMessage();
+            
+            // Draw the board
+            drawBoard();
+        }
+        
+        // ==================== BOARD RENDERING ====================
+        /**
+         * Draw the game board on the canvas
+         * Renders grid lines and placed stones
+         */
+        function drawBoard() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background
+            ctx.fillStyle = '#DEB887';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid lines
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const pos = margin + i * CELL_SIZE;
+                
+                // Vertical lines
+                ctx.beginPath();
+                ctx.moveTo(pos, margin);
+                ctx.lineTo(pos, margin + (BOARD_SIZE - 1) * CELL_SIZE);
+                ctx.stroke();
+                
+                // Horizontal lines
+                ctx.beginPath();
+                ctx.moveTo(margin, pos);
+                ctx.lineTo(margin + (BOARD_SIZE - 1) * CELL_SIZE, pos);
+                ctx.stroke();
+            }
+            
+            // Draw stones
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                for (let col = 0; col < BOARD_SIZE; col++) {
+                    if (board[row][col] === 'black') {
+                        drawStone(row, col, '#000');
+                    } else if (board[row][col] === 'white') {
+                        drawStone(row, col, '#FFF');
+                    }
+                }
+            }
+        }
+        
+        /**
+         * Draw a stone at the specified position
+         * @param {number} row - Row position
+         * @param {number} col - Column position
+         * @param {string} color - Stone color ('#000' for black, '#FFF' for white)
+         */
+        function drawStone(row, col, color) {
+            const x = margin + col * CELL_SIZE;
+            const y = margin + row * CELL_SIZE;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, CELL_SIZE * 0.4, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+        
+        /**
+         * Redraw the board (used for updates)
+         * Convenience function that calls drawBoard()
+         */
+        function redrawBoard() {
+            drawBoard();
+        }
+        
+        // ==================== INPUT HANDLING ====================
+        /**
+         * Convert mouse coordinates to board position
+         * @param {number} x - Mouse X coordinate
+         * @param {number} y - Mouse Y coordinate
+         * @returns {Object|null} Board position {row, col} or null if invalid
+         */
+        function getBoardPosition(x, y) {
+            const col = Math.round((x - margin) / CELL_SIZE);
+            const row = Math.round((y - margin) / CELL_SIZE);
+            
+            if (row >= 0 && row < BOARD_SIZE && col >= 0 && col < BOARD_SIZE) {
+                return { row, col };
+            }
+            return null;
+        }
+        
+        // ==================== GAME LOGIC ====================
+        /**
+         * Check if a move is valid
+         * @param {number} row - Row position
+         * @param {number} col - Column position
+         * @returns {boolean} True if move is valid
+         */
+        function isValidMove(row, col) {
+            // Check bounds
+            if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) {
+                console.log('Invalid move: out of bounds', row, col);
+                return false;
+            }
+            
+            // Check if position is empty
+            if (board[row][col] !== null) {
+                console.log('Invalid move: position occupied', row, col, 'by', board[row][col]);
+                return false;
+            }
+            
+            // Check if game is over
+            if (gameOver) {
+                console.log('Invalid move: game is over');
+                return false;
+            }
+            
+            // Check if it's my turn (online mode)
+            if (gameMode === 'online' && !isMyTurn()) {
+                console.log('Invalid move: not my turn');
+                return false;
+            }
+            
+            return true;
+        }
+        
+        /**
+         * Check if it's the current player's turn (online mode)
+         * @returns {boolean} True if it's the player's turn
+         */
+        function isMyTurn() {
+            if (!gameId || !myPlayer) return false;
+            return (currentPlayer === 'black' && myPlayer === 'black') || 
+                   (currentPlayer === 'white' && myPlayer === 'white');
+        }
+        
+        /**
+         * Make a move on the board
+         * Handles both local and online modes
+         * @param {number} row - Row position
+         * @param {number} col - Column position
+         * @returns {boolean} True if move was successful
+         */
+        function makeMove(row, col) {
+            if (!isValidMove(row, col)) {
+                console.log("Invalid move!");
+                return false;
+            }
+            
+            if (gameMode === 'online') {
+                // Send move to server for validation
+                socket.emit('makeMove', {
+                    gameId: gameId,
+                    row: row,
+                    col: col
+                });
+                return true;
+            } else {
+                // Local mode - handle move locally
+                board[row][col] = currentPlayer;
+                moveCount++;
+                
+                // Check for win
+                if (checkWin(row, col)) {
+                    gameOver = true;
+                    winner = currentPlayer;
+                    showGameOverMessage();
+                    updateGameStatus();
+                    return true;
+                }
+                
+                // Check for draw (board full)
+                if (moveCount >= BOARD_SIZE * BOARD_SIZE) {
+                    gameOver = true;
+                    winner = null; // Draw
+                    showGameOverMessage();
+                    updateGameStatus();
+                    return true;
+                }
+                
+                // Switch players
+                currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
+                updateCurrentPlayer();
+                updatePlayerInfo();
+                updateGameStatus();
+                
+                return true;
+            }
+        }
+        
+        /**
+         * Check if the last move resulted in a win
+         * @param {number} row - Row position of the last move
+         * @param {number} col - Column position of the last move
+         * @returns {boolean} True if the move resulted in a win
+         */
+        function checkWin(row, col) {
+            const directions = [
+                [0, 1],   // horizontal
+                [1, 0],   // vertical
+                [1, 1],   // diagonal \
+                [1, -1]   // diagonal /
+            ];
+            
+            for (let [dx, dy] of directions) {
+                let count = 1;
+                
+                // Check positive direction
+                for (let i = 1; i < WIN_LENGTH; i++) {
+                    const newRow = row + i * dx;
+                    const newCol = col + i * dy;
+                    if (newRow >= 0 && newRow < BOARD_SIZE && newCol >= 0 && newCol < BOARD_SIZE && 
+                        board[newRow][newCol] === currentPlayer) {
+                        count++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Check negative direction
+                for (let i = 1; i < WIN_LENGTH; i++) {
+                    const newRow = row - i * dx;
+                    const newCol = col - i * dy;
+                    if (newRow >= 0 && newRow < BOARD_SIZE && newCol >= 0 && newCol < BOARD_SIZE && 
+                        board[newRow][newCol] === currentPlayer) {
+                        count++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (count >= WIN_LENGTH) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        // ==================== EVENT HANDLERS ====================
+        /**
+         * Handle canvas click events
+         * Converts mouse position to board coordinates and makes move
+         * @param {Event} event - Mouse click event
+         */
+        function handleCanvasClick(event) {
+            if (gameOver) {
+                console.log('Canvas click ignored: game is over');
+                return;
+            }
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            const boardPosition = getBoardPosition(x, y);
+            
+            if (boardPosition) {
+                console.log('Attempting move at:', boardPosition.row, boardPosition.col);
+                if (makeMove(boardPosition.row, boardPosition.col)) {
+                    drawBoard();
+                }
+            }
+        }
+        
+        // ==================== UI UPDATES ====================
+        /**
+         * Update the current player display
+         * Shows which player's turn it is
+         */
+        function updateCurrentPlayer() {
+            const currentPlayerName = document.getElementById('currentPlayerName');
+            currentPlayerName.textContent = currentPlayer === 'black' ? 'Black' : 'White';
+            currentPlayerName.style.color = currentPlayer === 'black' ? '#000' : '#666';
+        }
+        
+        // Update game status
+        function updateGameStatus() {
+            const gameStatus = document.getElementById('gameStatus');
+            if (gameOver) {
+                if (winner) {
+                    gameStatus.textContent = `${winner.toUpperCase()} WINS!`;
+                    gameStatus.style.color = winner === 'black' ? '#000' : '#666';
+                } else {
+                    gameStatus.textContent = "It's a draw!";
+                    gameStatus.style.color = '#666';
+                }
+            } else {
+                if (gameMode === 'online') {
+                    if (isMyTurn()) {
+                        gameStatus.textContent = `Your turn (${myPlayer.toUpperCase()}) - Click to make a move`;
+                    } else {
+                        gameStatus.textContent = `Waiting for ${opponentName} to make a move...`;
+                    }
+                } else {
+                    gameStatus.textContent = `Click on the board to make your move`;
+                }
+                gameStatus.style.color = '#666';
+            }
+        }
+        
+        // Update player info display (local mode)
+        function updatePlayerInfo() {
+            if (gameMode === 'local') {
+                const player1 = document.getElementById('player1');
+                const player2 = document.getElementById('player2');
+                
+                // Remove current class from both
+                player1.classList.remove('current');
+                player2.classList.remove('current');
+                
+                // Add current class to active player
+                if (currentPlayer === 'black') {
+                    player1.classList.add('current');
+                } else {
+                    player2.classList.add('current');
+                }
+            }
+        }
+        
+        // Show game over message
+        function showGameOverMessage() {
+            const gameOverMessage = document.getElementById('gameOverMessage');
+            const winnerText = document.getElementById('winnerText');
+            
+            if (winner) {
+                if (gameMode === 'online' && winner === myPlayer) {
+                    winnerText.textContent = `🎉 YOU WIN! 🎉`;
+                } else if (gameMode === 'online' && winner === 'draw') {
+                    winnerText.textContent = "🤝 It's a draw!";
+                } else if (gameMode === 'online' && winner === 'disconnect') {
+                    winnerText.textContent = `😞 Opponent Left - Game Finished`;
+                } else if (gameMode === 'online') {
+                    winnerText.textContent = `😞 ${opponentName} WINS!`;
+                } else {
+                    winnerText.textContent = `${winner.toUpperCase()} WINS!`;
+                }
+            } else {
+                winnerText.textContent = "It's a draw!";
+            }
+            
+            gameOverMessage.style.display = 'block';
+        }
+        
+        // Hide game over message
+        function hideGameOverMessage() {
+            document.getElementById('gameOverMessage').style.display = 'none';
+        }
+        
+        // Restart the current game
+        function restartGame() {
+            // Ensure we stay in the current game mode
+            if (gameMode === 'local') {
+                switchToLocalMode();
+            } else {
+                initGame();
+            }
+        }
+        
+        // Start a new game
+        function newGame() {
+            if (gameMode === 'local') {
+                // Local mode: restart the game
+                switchToLocalMode();
+            } else {
+                // Online mode: check if we're in an active game
+                if (gameId && socket && socket.connected && !gameOver) {
+                    // In the middle of an active game - request new game from opponent
+                    console.log('Requesting new game from opponent');
+                    socket.emit('requestNewGame', { gameId: gameId });
+                } else if (gameId && socket && socket.connected && gameOver) {
+                    // Game is over - start fresh like the start over button
+                    console.log('Game is over, starting fresh');
+                    // Notify server that we're leaving the current game
+                    socket.emit('leaveGame', { gameId: gameId });
+                    
+                    // Reset online game state
+                    gameId = null;
+                    myPlayer = null;
+                    opponentName = null;
+                    isWaitingForOpponent = false;
+                    hasClickedStartOver = false;
+                    
+                    // Clear saved game state (but keep user session)
+                    clearGameState();
+                    
+                    // Reset local game state
+                    resetGameState();
+                    initGame();
+                    
+                    // Show new game info
+                    showNewGameInfo();
+                    updateStatus(`Welcome ${playerName}! Enter your name to start a new game`);
+                } else {
+                    // No active game, just reset
+                    resetGameState();
+                    initGame();
+                    if (playerName) {
+                        updateStatus(`Welcome ${playerName}! Looking for an opponent...`);
+                        socket.emit('joinGame', { playerName: playerName });
+                    } else {
+                        showUsernameForm();
+                    }
+                }
+            }
+        }
+        
+        // Reset game state
+        function resetGameState() {
+            gameOver = false;
+            winner = null;
+            hasClickedStartOver = false;
+            currentPlayer = 'black';
+        }
+        
+        // ==================== ONLINE MODE UI FUNCTIONS ====================
+        /**
+         * Show username input modal for online play
+         */
+        function showUsernameForm() {
+            console.log('showUsernameForm called - showing username modal');
+            document.getElementById('usernameModal').style.display = 'flex';
+            document.getElementById('usernameInput').focus();
+        }
+
+        function hideUsernameForm() {
+            document.getElementById('usernameModal').style.display = 'none';
+            document.getElementById('usernameInput').value = '';
+        }
+
+
+        function showWaitingMessage() {
+            document.getElementById('waitingMessage').style.display = 'block';
+        }
+
+        function hideWaitingMessage() {
+            document.getElementById('waitingMessage').style.display = 'none';
+        }
+
+        function showNewGameWaitingMessage() {
+            document.getElementById('newGameWaitingMessage').style.display = 'block';
+        }
+
+        function hideNewGameWaitingMessage() {
+            document.getElementById('newGameWaitingMessage').style.display = 'none';
+        }
+
+        function showNewGameInfo() {
+            document.getElementById('newGameInfo').style.display = 'block';
+        }
+
+        function hideNewGameInfo() {
+            document.getElementById('newGameInfo').style.display = 'none';
+        }
+
+        function showNewGameConfirmation(message, requestingPlayer) {
+            document.getElementById('newGameMessage').textContent = message;
+            document.getElementById('newGameModal').style.display = 'flex';
+        }
+
+        function hideNewGameConfirmation() {
+            document.getElementById('newGameModal').style.display = 'none';
+        }
+
+        function showPlayerProfiles(playerName, opponentName, myPlayer) {
+            const player1Profile = document.getElementById('player1Profile');
+            const player2Profile = document.getElementById('player2Profile');
+            
+            if (myPlayer === 'black') {
+                player1Profile.textContent = `${playerName} (Black)`;
+                player2Profile.textContent = `${opponentName} (White)`;
+            } else {
+                player1Profile.textContent = `${opponentName} (Black)`;
+                player2Profile.textContent = `${playerName} (White)`;
+            }
+            
+            player1Profile.style.display = 'block';
+            player2Profile.style.display = 'block';
+        }
+
+        function updateStartOverButton() {
+            const startOverButton = document.getElementById('startOverButton');
+            if (hasClickedStartOver) {
+                startOverButton.textContent = `Waiting for ${opponentName} to get ready...`;
+                startOverButton.disabled = true;
+            } else {
+                startOverButton.textContent = 'Opponent wants to start over - Click to confirm';
+                updateStatus('Waiting for opponent to get ready...');
+            }
+        }
+
+        function updateStatus(message) {
+            if (message) {
+                document.getElementById('gameStatus').textContent = message;
+                return;
+            }
+            updateGameStatus();
+        }
+
+        function showError(message) {
+            // Create or update error message
+            let errorDiv = document.getElementById('errorMessage');
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                errorDiv.id = 'errorMessage';
+                errorDiv.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background-color: #ff4444;
+                    color: white;
+                    padding: 15px 20px;
+                    border-radius: 5px;
+                    z-index: 1000;
+                    max-width: 300px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                `;
+                document.body.appendChild(errorDiv);
+            }
+            
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showInfo(message) {
+            // Create or update info message
+            let infoDiv = document.getElementById('infoMessage');
+            if (!infoDiv) {
+                infoDiv = document.createElement('div');
+                infoDiv.id = 'infoMessage';
+                infoDiv.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background-color: #4CAF50;
+                    color: white;
+                    padding: 15px 20px;
+                    border-radius: 5px;
+                    z-index: 1000;
+                    max-width: 300px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                `;
+                document.body.appendChild(infoDiv);
+            }
+            
+            infoDiv.textContent = message;
+            infoDiv.style.display = 'block';
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                infoDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // ==================== EVENT HANDLERS FOR ONLINE MODE ====================
+        /**
+         * Handle username form submission
+         * Validates username and sends to server
+         */
+        function handleUsernameSubmit() {
+            const username = document.getElementById('usernameInput').value.trim();
+            
+            if (username.length === 0) {
+                showError('Please enter your name');
+                return;
+            }
+            
+            if (username.length < 2) {
+                showError('Name must be at least 2 characters long');
+                return;
+            }
+            
+            console.log('Submitting username:', username);
+            
+            // Disable the button to prevent double submission
+            const submitButton = document.getElementById('usernameSubmit');
+            submitButton.disabled = true;
+            submitButton.textContent = 'Joining...';
+            
+            // Add timeout fallback in case server doesn't respond
+            const timeout = setTimeout(() => {
+                console.log('Username submission timeout');
+                submitButton.disabled = false;
+                submitButton.textContent = 'Join Game';
+                showError('Connection timeout. Please try again.');
+            }, 5000);
+            
+            // Store timeout ID to clear it when we get a response
+            window.usernameTimeout = timeout;
+            
+            socket.emit('setUsername', { username: username });
+        }
+
+
+        function handleStartOverClick() {
+            if (gameMode === 'local') {
+                // For local mode, just restart the game
+                hideGameOverMessage();
+                restartGame();
+            } else {
+                // For online mode, start a new game and wait for opponent
+                console.log('Start over clicked - starting new game and waiting for opponent');
+                
+                // Clear the current game state
+                clearGameState();
+                
+                // Reset game variables
+                gameId = null;
+                myPlayer = null;
+                opponentName = null;
+                isWaitingForOpponent = false;
+                hasClickedStartOver = false;
+                
+                // Hide game over message
+                hideGameOverMessage();
+                
+                // Reset the board
+                resetGameState();
+                initGame();
+                
+                // Show new game info
+                showNewGameInfo();
+                
+                // Update status
+                updateStatus(`Welcome ${playerName}! Looking for an opponent...`);
+                
+                // Automatically join the waiting queue
+                if (socket && socket.connected && playerName) {
+                    socket.emit('joinGame', { playerName: playerName });
+                }
+            }
+        }
+        
+        // ==================== EVENT LISTENER SETUP ====================
+        // Set up all event listeners
+        canvas.addEventListener('click', handleCanvasClick);
+        document.getElementById('usernameSubmit').addEventListener('click', handleUsernameSubmit);
+        document.getElementById('startOverButton').addEventListener('click', handleStartOverClick);
+        document.getElementById('usernameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleUsernameSubmit();
+            }
+        });
+        
+        // Add keyboard shortcut for refresh detection
+        document.addEventListener('keydown', (e) => {
+            // Detect F5 or Ctrl+R (refresh shortcuts)
+            if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
+                markAsRefresh();
+            }
+        });
+        
+        // New game confirmation event handlers
+        document.getElementById('acceptNewGame').addEventListener('click', () => {
+            if (gameId && socket && socket.connected) {
+                socket.emit('respondToNewGame', { gameId: gameId, accept: true });
+                hideNewGameConfirmation();
+            }
+        });
+        
+        document.getElementById('rejectNewGame').addEventListener('click', () => {
+            if (gameId && socket && socket.connected) {
+                socket.emit('respondToNewGame', { gameId: gameId, accept: false });
+                hideNewGameConfirmation();
+            }
+        });
+        
+        // ==================== DEBUG FUNCTIONS ====================
+        /**
+         * Debug function to test sessionStorage functionality
+         * Can be called from browser console for testing
+         */
+        function testSessionStorage() {
+            console.log('=== Testing Session Storage ===');
+            console.log('Current sessionStorage goGameSession:', sessionStorage.getItem('goGameSession'));
+            console.log('Current sessionStorage goGameState:', sessionStorage.getItem('goGameState'));
+            
+            // Test saving a session
+            const testSession = {
+                playerName: 'TestUser',
+                lastLogin: new Date().toISOString()
+            };
+            sessionStorage.setItem('goGameSession', JSON.stringify(testSession));
+            console.log('Test session saved:', testSession);
+            
+            // Test loading it back
+            const loaded = loadUserSession();
+            console.log('Test session loaded:', loaded);
+        }
+        
+        // Make test function available globally for debugging
+        window.testSessionStorage = testSessionStorage;
+        
+        // Make clear function available globally for debugging
+        window.clearAllData = clearAllSessionData;
+        
+        // Handle tab close/refresh to clean up session
+        window.addEventListener('beforeunload', (event) => {
+            // Always save game state before unload (in case it's a refresh)
+            saveGameState();
+            
+            // Mark as potential refresh (will be confirmed on page load)
+            markAsRefresh();
+            
+            // Don't notify server of disconnect here - let the server timeout handle it
+            // This prevents false disconnects on refresh
+        });
+        
+        // Note: Removed visibility change handler as it was causing false positives
+        // The beforeunload event should be sufficient for detecting tab closes
+        
+        // Check server availability before restoring saved state
+        async function checkServerAvailability() {
+            try {
+                // Try to connect to the server with a short timeout
+                if (!socket) {
+                    await initializeSocket();
+                }
+                if (socket && !socket.connected) {
+                    socket.connect();
+                }
+                
+                // Wait a short time to see if connection succeeds
+                return new Promise((resolve) => {
+                    const timeout = setTimeout(() => {
+                        resolve(false);
+                    }, 3000); // 3 second timeout
+                    
+                    if (socket && socket.connected) {
+                        clearTimeout(timeout);
+                        resolve(true);
+                    } else if (socket) {
+                        socket.on('connect', () => {
+                            clearTimeout(timeout);
+                            resolve(true);
+                        });
+                        socket.on('connect_error', () => {
+                            clearTimeout(timeout);
+                            resolve(false);
+                        });
+                    } else {
+                        // Socket initialization failed
+                        clearTimeout(timeout);
+                        resolve(false);
+                    }
+                });
+            } catch (error) {
+                console.log('Server availability check failed:', error);
+                return false;
+            }
+        }
+        
+        
+        // ==================== PAGE INITIALIZATION ====================
+        /**
+         * Initialize the game when page loads
+         * Handles state restoration and mode selection
+         */
+        window.addEventListener('load', async () => {
+            // Check if this is a refresh using navigation API
+            const isRefresh = isPageRefresh() || isMarkedAsRefresh();
+            console.log('Page load - isRefresh:', isRefresh, 'navigation type:', performance.navigation?.type);
+            
+            // Check for saved game state and user session
+            const savedState = loadGameState();
+            const userSession = loadUserSession();
+            
+            // If we have saved online game state, try to restore it
+            if (savedState && savedState.mode === 'online' && savedState.playerName && savedState.gameId) {
+                console.log('Found saved online game, checking server availability...');
+                const serverAvailable = await checkServerAvailability();
+                
+                if (!serverAvailable) {
+                    console.log('Server not available, starting fresh in local mode');
+                    // Start in local mode
+                    gameMode = 'local';
+                    playerName = null;
+                    
+                    // Set up UI - start in local mode
+                    document.getElementById('localModeBtn').classList.add('active');
+                    document.getElementById('onlineModeBtn').classList.remove('active');
+                    document.getElementById('localPlayerInfo').style.display = 'flex';
+                    document.getElementById('playerProfiles').style.display = 'none';
+                    
+                    initGame();
+                    // Ensure board is drawn immediately
+                    redrawBoard();
+                    console.log('Game initialized in local mode (server unavailable)');
+                    return;
+                }
+            } else if (userSession && userSession.playerName) {
+                console.log('Found saved user session, checking server availability...');
+                const serverAvailable = await checkServerAvailability();
+                
+                if (!serverAvailable) {
+                    console.log('Server not available, starting fresh in local mode');
+                    // Start in local mode
+                    gameMode = 'local';
+                    playerName = null;
+                    
+                    // Set up UI - start in local mode
+                    document.getElementById('localModeBtn').classList.add('active');
+                    document.getElementById('onlineModeBtn').classList.remove('active');
+                    document.getElementById('localPlayerInfo').style.display = 'flex';
+                    document.getElementById('playerProfiles').style.display = 'none';
+                    
+                    initGame();
+                    // Ensure board is drawn immediately
+                    redrawBoard();
+                    console.log('Game initialized in local mode (server unavailable)');
+                    return;
+                }
+            } else {
+                // No saved state, start directly in local mode without checking server
+                console.log('No saved state, starting in local mode');
+                gameMode = 'local';
+                playerName = null;
+                
+                // Set up UI - start in local mode
+                document.getElementById('localModeBtn').classList.add('active');
+                document.getElementById('onlineModeBtn').classList.remove('active');
+                document.getElementById('localPlayerInfo').style.display = 'flex';
+                document.getElementById('playerProfiles').style.display = 'none';
+                
+                initGame();
+                // Ensure board is drawn immediately
+                redrawBoard();
+                console.log('Game initialized in local mode');
+                return;
+            }
+            
+            // If we reach here, we have saved online state and server is available
+            // Handle online mode restoration
+            if (userSession && userSession.playerName) {
+                console.log('Saved session detected (likely from refresh), attempting to restore:', userSession.playerName);
+                gameMode = 'online';
+                playerName = userSession.playerName;
+                
+                // Check if we have saved game state with board data
+                if (savedState && savedState.board && isRefresh) {
+                    console.log('Refresh detected with saved board state, restoring board...');
+                    console.log('Saved board state:', savedState.board);
+                    
+                    // Restore the board state
+                    board = savedState.board;
+                    currentPlayer = savedState.currentPlayer;
+                    gameOver = savedState.gameOver;
+                    winner = savedState.winner;
+                    moveCount = savedState.moveCount || 0;
+                    gameId = savedState.gameId;
+                    myPlayer = savedState.myPlayer;
+                    opponentName = savedState.opponentName;
+                }
+                
+                // Set up UI - start in online mode
+                document.getElementById('onlineModeBtn').classList.add('active');
+                document.getElementById('localModeBtn').classList.remove('active');
+                document.getElementById('localPlayerInfo').style.display = 'none';
+                document.getElementById('playerProfiles').style.display = 'flex';
+                
+                // Initialize socket and try to restore session
+                try {
+                    if (!socket) {
+                        await initializeSocket();
+                    }
+                    if (socket && !socket.connected) {
+                        socket.connect();
+                    }
+                    if (socket && socket.connected) {
+                        console.log('Socket connected, attempting to restore session with username:', playerName);
+                        // Set the auto-reconnecting flag to prevent username modal
+                        isAutoReconnecting = true;
+                        socket.emit('setUsername', { username: playerName });
+                    } else {
+                        console.log('Socket not connected, waiting for connection...');
+                        socket.on('connect', () => {
+                            console.log('Socket connected after waiting, attempting to restore session:', playerName);
+                            // Set the auto-reconnecting flag to prevent username modal
+                            isAutoReconnecting = true;
+                            socket.emit('setUsername', { username: playerName });
+                        });
+                    }
+                } catch (error) {
+                    console.error('Failed to restore session:', error);
+                    showError('Failed to restore session. Please try again.');
+                }
+                
+                // Initialize game (this will reset the board if we didn't restore it)
+                if (!savedState || !savedState.board || !isRefresh) {
+                    initGame();
+                }
+                
+                // Draw the board (restored or fresh)
+                redrawBoard();
+                
+                console.log('Game initialized in online mode with session restoration');
+                return;
+            }
+            
+            // Handle saved game state with server available
+            if (savedState && savedState.mode === 'online' && savedState.playerName && savedState.gameId) {
+                console.log('Found saved online game, switching to online mode...', savedState);
+                
+                // Check if this is a refresh and we have board state to restore
+                if (isRefresh && savedState.board) {
+                    console.log('Refresh detected with saved board state, restoring board...');
+                    console.log('Saved board state:', savedState.board);
+                    console.log('Saved game state:', savedState);
+                    
+                    // Set up UI for online mode first
+                    gameMode = 'online';
+                    document.getElementById('onlineModeBtn').classList.add('active');
+                    document.getElementById('localModeBtn').classList.remove('active');
+                    document.getElementById('localPlayerInfo').style.display = 'none';
+                    document.getElementById('playerProfiles').style.display = 'flex';
+                    
+                    // Restore the board state
+                    board = savedState.board;
+                    currentPlayer = savedState.currentPlayer;
+                    gameOver = savedState.gameOver;
+                    winner = savedState.winner;
+                    moveCount = savedState.moveCount || 0;
+                    
+                    // Initialize socket and reconnect
+                    try {
+                        if (!socket) {
+                            await initializeSocket();
+                        }
+                        if (socket && !socket.connected) {
+                            socket.connect();
+                        }
+                        
+                        if (socket && socket.connected) {
+                            // Set up reconnection variables
+                            playerName = savedState.playerName;
+                            gameId = savedState.gameId;
+                            myPlayer = savedState.myPlayer;
+                            opponentName = savedState.opponentName;
+                            
+                            // Attempt reconnection
+                            socket.emit('setUsername', { username: playerName });
+                        }
+                    } catch (error) {
+                        console.error('Failed to reconnect after refresh:', error);
+                        showError('Failed to reconnect after refresh. Please try again.');
+                    }
+                    
+                    // Draw the restored board
+                    redrawBoard();
+                    
+                    console.log('Board restored from refresh, current board:', board);
+                } else {
+                    console.log('Not restoring board - isRefresh:', isRefresh, 'hasBoard:', !!savedState.board);
+                    
+                    // Set the auto-reconnecting flag before switching modes
+                    isAutoReconnecting = true;
+                    // Switch to online mode and attempt reconnection
+                    await switchToOnlineMode();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
