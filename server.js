@@ -31,6 +31,282 @@ app.get("/local", (req, res) => {
   res.sendFile(path.join(__dirname, 'client.html'));
 });
 
+// ==================== AI PLAYER CLASS ====================
+/**
+ * AI Player class for Five-in-a-Row game
+ * Implements strategic gameplay with blocking and winning patterns
+ */
+class AIPlayer {
+  constructor() {
+    this.name = "AI Player";
+    this.difficulty = "medium"; // easy, medium, hard
+    this.thinkingTime = 1000; // milliseconds to simulate thinking
+  }
+
+  /**
+   * Main AI decision function
+   * Analyzes the board and returns the best move
+   * @param {Array} board - 19x19 game board
+   * @param {string} aiPlayer - AI's player color ('black' or 'white')
+   * @param {string} humanPlayer - Human's player color
+   * @returns {Object} Best move {row, col} or null if no moves available
+   */
+  getBestMove(board, aiPlayer, humanPlayer) {
+    console.log(`AI ${aiPlayer} is thinking...`);
+    
+    // Get all empty positions
+    const emptyPositions = this.getEmptyPositions(board);
+    if (emptyPositions.length === 0) {
+      return null;
+    }
+
+    // Priority 1: Check if AI can win in one move
+    const winningMove = this.findWinningMove(board, aiPlayer, emptyPositions);
+    if (winningMove) {
+      console.log(`AI found winning move:`, winningMove);
+      return winningMove;
+    }
+
+    // Priority 2: Check if human can win in one move (block them)
+    const blockingMove = this.findWinningMove(board, humanPlayer, emptyPositions);
+    if (blockingMove) {
+      console.log(`AI blocking human win:`, blockingMove);
+      return blockingMove;
+    }
+
+    // Priority 3: Check for 4-in-a-row threats (human)
+    const threatMove = this.findThreatMove(board, humanPlayer, emptyPositions);
+    if (threatMove) {
+      console.log(`AI blocking 4-in-a-row threat:`, threatMove);
+      return threatMove;
+    }
+
+    // Priority 4: Create own 4-in-a-row opportunities
+    const opportunityMove = this.findThreatMove(board, aiPlayer, emptyPositions);
+    if (opportunityMove) {
+      console.log(`AI creating 4-in-a-row opportunity:`, opportunityMove);
+      return opportunityMove;
+    }
+
+    // Priority 5: Strategic positioning
+    const strategicMove = this.findStrategicMove(board, aiPlayer, humanPlayer, emptyPositions);
+    if (strategicMove) {
+      console.log(`AI strategic move:`, strategicMove);
+      return strategicMove;
+    }
+
+    // Fallback: Random move from center area
+    const randomMove = this.getRandomMove(emptyPositions);
+    console.log(`AI random move:`, randomMove);
+    return randomMove;
+  }
+
+  /**
+   * Find all empty positions on the board
+   * @param {Array} board - Game board
+   * @returns {Array} Array of {row, col} positions
+   */
+  getEmptyPositions(board) {
+    const emptyPositions = [];
+    for (let row = 0; row < 19; row++) {
+      for (let col = 0; col < 19; col++) {
+        if (board[row][col] === null) {
+          emptyPositions.push({ row, col });
+        }
+      }
+    }
+    return emptyPositions;
+  }
+
+  /**
+   * Check if a player can win in one move
+   * @param {Array} board - Game board
+   * @param {string} player - Player color
+   * @param {Array} emptyPositions - Available positions
+   * @returns {Object|null} Winning move or null
+   */
+  findWinningMove(board, player, emptyPositions) {
+    for (const pos of emptyPositions) {
+      // Temporarily place the stone
+      board[pos.row][pos.col] = player;
+      
+      // Check if this creates a win
+      if (this.checkWinAtPosition(board, pos.row, pos.col, player)) {
+        // Remove the temporary stone
+        board[pos.row][pos.col] = null;
+        return pos;
+      }
+      
+      // Remove the temporary stone
+      board[pos.row][pos.col] = null;
+    }
+    return null;
+  }
+
+  /**
+   * Check for 4-in-a-row threats that need blocking
+   * @param {Array} board - Game board
+   * @param {string} player - Player color to check threats for
+   * @param {Array} emptyPositions - Available positions
+   * @returns {Object|null} Threat blocking move or null
+   */
+  findThreatMove(board, player, emptyPositions) {
+    const directions = [
+      [0, 1],   // horizontal
+      [1, 0],   // vertical
+      [1, 1],   // diagonal \
+      [1, -1]   // diagonal /
+    ];
+
+    for (const pos of emptyPositions) {
+      for (const [dx, dy] of directions) {
+        // Check if placing a stone here would create a 4-in-a-row
+        let count = 1;
+        
+        // Count in positive direction
+        for (let i = 1; i < 4; i++) {
+          const newRow = pos.row + i * dx;
+          const newCol = pos.col + i * dy;
+          if (newRow >= 0 && newRow < 19 && newCol >= 0 && newCol < 19 && 
+              board[newRow][newCol] === player) {
+            count++;
+          } else {
+            break;
+          }
+        }
+        
+        // Count in negative direction
+        for (let i = 1; i < 4; i++) {
+          const newRow = pos.row - i * dx;
+          const newCol = pos.col - i * dy;
+          if (newRow >= 0 && newRow < 19 && newCol >= 0 && newCol < 19 && 
+              board[newRow][newCol] === player) {
+            count++;
+          } else {
+            break;
+          }
+        }
+        
+        if (count >= 4) {
+          return pos;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find strategic moves for better positioning
+   * @param {Array} board - Game board
+   * @param {string} aiPlayer - AI player color
+   * @param {string} humanPlayer - Human player color
+   * @param {Array} emptyPositions - Available positions
+   * @returns {Object|null} Strategic move or null
+   */
+  findStrategicMove(board, aiPlayer, humanPlayer, emptyPositions) {
+    // Look for positions near existing stones
+    const scoredMoves = [];
+    
+    for (const pos of emptyPositions) {
+      let score = 0;
+      
+      // Score based on proximity to existing stones
+      for (let row = 0; row < 19; row++) {
+        for (let col = 0; col < 19; col++) {
+          if (board[row][col] !== null) {
+            const distance = Math.abs(pos.row - row) + Math.abs(pos.col - col);
+            if (distance <= 3) {
+              // Prefer positions near existing stones
+              score += (4 - distance) * (board[row][col] === aiPlayer ? 2 : 1);
+            }
+          }
+        }
+      }
+      
+      // Prefer center positions
+      const centerDistance = Math.abs(pos.row - 9) + Math.abs(pos.col - 9);
+      score += (18 - centerDistance) * 0.5;
+      
+      scoredMoves.push({ ...pos, score });
+    }
+    
+    // Sort by score and return the best move
+    scoredMoves.sort((a, b) => b.score - a.score);
+    return scoredMoves.length > 0 ? { row: scoredMoves[0].row, col: scoredMoves[0].col } : null;
+  }
+
+  /**
+   * Get a random move from available positions
+   * @param {Array} emptyPositions - Available positions
+   * @returns {Object} Random move
+   */
+  getRandomMove(emptyPositions) {
+    const randomIndex = Math.floor(Math.random() * emptyPositions.length);
+    return emptyPositions[randomIndex];
+  }
+
+  /**
+   * Check if there's a win at a specific position
+   * @param {Array} board - Game board
+   * @param {number} row - Row position
+   * @param {number} col - Column position
+   * @param {string} player - Player color
+   * @returns {boolean} True if win exists
+   */
+  checkWinAtPosition(board, row, col, player) {
+    const directions = [
+      [0, 1],   // horizontal
+      [1, 0],   // vertical
+      [1, 1],   // diagonal \
+      [1, -1]   // diagonal /
+    ];
+    
+    for (const [dx, dy] of directions) {
+      let count = 1;
+      
+      // Check positive direction
+      for (let i = 1; i < 5; i++) {
+        const newRow = row + i * dx;
+        const newCol = col + i * dy;
+        if (newRow >= 0 && newRow < 19 && newCol >= 0 && newCol < 19 && 
+            board[newRow][newCol] === player) {
+          count++;
+        } else {
+          break;
+        }
+      }
+      
+      // Check negative direction
+      for (let i = 1; i < 5; i++) {
+        const newRow = row - i * dx;
+        const newCol = col - i * dy;
+        if (newRow >= 0 && newRow < 19 && newCol >= 0 && newCol < 19 && 
+            board[newRow][newCol] === player) {
+          count++;
+        } else {
+          break;
+        }
+      }
+      
+      if (count >= 5) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Simulate thinking time for more realistic gameplay
+   * @returns {Promise} Promise that resolves after thinking time
+   */
+  async think() {
+    return new Promise(resolve => {
+      setTimeout(resolve, this.thinkingTime);
+    });
+  }
+}
+
 // ==================== GAME STATE MANAGEMENT ====================
 // Core data structures for managing game state and player connections
 
@@ -50,6 +326,9 @@ let gameHistory = new Map();
 let connectedPlayers = new Map(); // socketId -> playerName
 let playerNames = new Set(); // Track used names to prevent duplicates
 let playerGameMap = new Map(); // playerName -> gameId (for reconnection)
+
+// AI player instance
+const aiPlayer = new AIPlayer();
 
 /**
  * Clear connection-related state on server restart
@@ -71,7 +350,7 @@ function clearAllGameState() {
  * Handles game logic, move validation, and win detection
  */
 class Game {
-  constructor(player1, player2, player1Name, player2Name) {
+  constructor(player1, player2, player1Name, player2Name, isAIGame = false) {
     // Generate unique game ID using timestamp and random string
     this.id = Date.now().toString() + Math.random().toString(36).substring(2);
     
@@ -80,6 +359,7 @@ class Game {
     this.player2 = player2;
     this.player1Name = player1Name;
     this.player2Name = player2Name;
+    this.isAIGame = isAIGame;
     
     // Game state
     this.board = this.initializeBoard();
@@ -257,9 +537,112 @@ class Game {
       moveCount: this.moveCount,
       player1Name: this.player1Name,
       player2Name: this.player2Name,
+      isAIGame: this.isAIGame,
       createdAt: this.createdAt,
       lastMoveAt: this.lastMoveAt
     };
+  }
+}
+
+// ==================== AI GAME HANDLING ====================
+/**
+ * Handle AI move after human player makes a move
+ * @param {string} gameId - Game ID
+ */
+async function handleAIMove(gameId) {
+  console.log('handleAIMove called for gameId:', gameId);
+  const game = games.get(gameId);
+  if (!game) {
+    console.log('Game not found for AI move:', gameId);
+    return;
+  }
+  if (!game.isAIGame) {
+    console.log('Game is not an AI game:', gameId);
+    return;
+  }
+  if (game.gameOver) {
+    console.log('Game is over, no AI move needed:', gameId);
+    return;
+  }
+
+  console.log('AI move conditions met, proceeding...');
+  console.log('Current player:', game.currentPlayer);
+  console.log('Game state:', game.getGameState());
+
+  // Determine AI and human players
+  const aiPlayerColor = game.player2Name === 'AI Player' ? 'white' : 'black';
+  const humanPlayerColor = aiPlayerColor === 'black' ? 'white' : 'black';
+  
+  console.log('AI player color:', aiPlayerColor, 'Human player color:', humanPlayerColor);
+
+  // AI thinking time
+  console.log('AI is thinking...');
+  await aiPlayer.think();
+
+  // Get AI's best move
+  console.log('Getting AI best move...');
+  const aiMove = aiPlayer.getBestMove(game.board, aiPlayerColor, humanPlayerColor);
+  
+  if (aiMove) {
+    console.log(`AI making move:`, aiMove);
+    
+    // Make the AI move
+    const moveResult = game.makeMove(aiMove.row, aiMove.col, aiPlayerColor);
+    
+    if (moveResult.success) {
+      // Record move in game history
+      if (gameHistory.has(gameId)) {
+        gameHistory.get(gameId).moves.push({
+          row: aiMove.row, 
+          col: aiMove.col, 
+          player: aiPlayerColor, 
+          playerName: 'AI Player',
+          timestamp: new Date(),
+          moveNumber: game.moveCount
+        });
+      }
+      
+      logGameEvent('AI_MOVE_SUCCESS', { 
+        gameId, 
+        player: aiPlayerColor, 
+        row: aiMove.row, 
+        col: aiMove.col,
+        gameOver: moveResult.gameOver,
+        winner: moveResult.winner
+      });
+      
+      // Send update to human player
+      const gameState = game.getGameState();
+      game.player1.emit('gameUpdate', gameState);
+      
+      // Send specific move confirmation
+      game.player1.emit('moveConfirmed', {
+        row: aiMove.row, 
+        col: aiMove.col, 
+        player: aiPlayerColor,
+        gameState: gameState
+      });
+      
+      // If game is over, send final results
+      if (moveResult.gameOver) {
+        const winnerName = moveResult.winner === 'black' ? game.player1Name : game.player2Name;
+        const loserName = moveResult.winner === 'black' ? game.player2Name : game.player1Name;
+        
+        game.player1.emit('gameEnded', {
+          winner: moveResult.winner,
+          winnerName: winnerName,
+          loserName: loserName,
+          gameState: gameState
+        });
+        
+        logGameEvent('AI_GAME_ENDED', { 
+          gameId, 
+          winner: moveResult.winner,
+          winnerName: winnerName,
+          loserName: loserName
+        });
+      }
+    }
   }
 }
 
@@ -495,6 +878,82 @@ io.on('connection', (socket) => {
   });
 
   /**
+   * Handle AI game requests
+   * Creates a game between human player and AI
+   */
+  socket.on("joinAIGame", (data) => {
+    console.log('Received joinAIGame request:', data);
+    try {
+      // Check if player has set a username
+      if (!connectedPlayers.has(socket.id)) {
+        console.log('AI join failed: No username set for socket', socket.id);
+        socket.emit("usernameRequired", { 
+          message: "Please set your username first" 
+        });
+        return;
+      }
+      
+      const playerName = connectedPlayers.get(socket.id);
+      console.log('AI join request from player:', playerName);
+      
+      // Check if player is already in a game
+      const existingGameId = playerGameMap.get(playerName);
+      if (existingGameId && games.has(existingGameId)) {
+        console.log('Player already in game, ignoring AI join request:', playerName);
+        return;
+      }
+      
+      logGameEvent('AI_JOIN_GAME_REQUEST', { socketId: socket.id, playerName });
+      
+      // Create AI game
+      const game = new Game(socket, null, playerName, "AI Player", true);
+      games.set(game.id, game);
+      
+      // Store game history
+      gameHistory.set(game.id, {
+        gameId: game.id,
+        players: [playerName, "AI Player"],
+        createdAt: game.createdAt,
+        moves: []
+      });
+      
+      logGameEvent('AI_GAME_CREATED', { 
+        gameId: game.id, 
+        player: playerName
+      });
+
+      // Join player to the game room
+      socket.join(game.id);
+
+      // Map player to their game for reconnection
+      playerGameMap.set(playerName, game.id);
+
+      // Notify the player with game info
+      const gameState = game.getGameState();
+      console.log('Sending gameStarted event to player:', playerName);
+      socket.emit("gameStarted", { 
+        gameId: game.id, 
+        player: "black",
+        playerName: playerName,
+        opponentName: "AI Player",
+        gameState: gameState,
+        isAIGame: true
+      });
+      
+      logGameEvent('AI_GAME_STARTED', { gameId: game.id });
+
+      // Send initial board state
+      socket.emit("gameUpdate", gameState);
+      console.log('AI game created successfully for player:', playerName);
+    } catch (error) {
+      console.error('AI join game error:', error);
+      socket.emit("joinGameError", { 
+        message: "Error joining AI game" 
+      });
+    }
+  });
+
+  /**
    * Handle move requests with server-side validation
    * Prevents cheating and ensures game integrity
    */
@@ -557,7 +1016,10 @@ io.on('connection', (socket) => {
       });
       
       // Use server-side validation and move execution
+      console.log('Making move for player:', player, 'at position:', row, col);
+      console.log('Game isAIGame:', game.isAIGame);
       const moveResult = game.makeMove(row, col, player);
+      console.log('Move result:', moveResult);
       
       if (moveResult.success) {
         // Record move in game history
@@ -579,9 +1041,15 @@ io.on('connection', (socket) => {
           winner: moveResult.winner
         });
         
-        // Send update to both players
+        // Send update to both players (or just human player in AI game)
         const gameState = game.getGameState();
-        broadcastToGame(gameId, 'gameUpdate', gameState);
+        if (game.isAIGame) {
+          // AI game - only send to human player
+          socket.emit('gameUpdate', gameState);
+        } else {
+          // Regular game - send to both players
+          broadcastToGame(gameId, 'gameUpdate', gameState);
+        }
         
         // Send specific move confirmation to the player who made the move
         socket.emit('moveConfirmed', {
@@ -594,12 +1062,23 @@ io.on('connection', (socket) => {
           const winnerName = moveResult.winner === 'black' ? game.player1Name : game.player2Name;
           const loserName = moveResult.winner === 'black' ? game.player2Name : game.player1Name;
           
-          broadcastToGame(gameId, 'gameEnded', {
-            winner: moveResult.winner,
-            winnerName: winnerName,
-            loserName: loserName,
-            gameState: gameState
-          });
+          if (game.isAIGame) {
+            // AI game - only send to human player
+            socket.emit('gameEnded', {
+              winner: moveResult.winner,
+              winnerName: winnerName,
+              loserName: loserName,
+              gameState: gameState
+            });
+          } else {
+            // Regular game - send to both players
+            broadcastToGame(gameId, 'gameEnded', {
+              winner: moveResult.winner,
+              winnerName: winnerName,
+              loserName: loserName,
+              gameState: gameState
+            });
+          }
           
           logGameEvent('GAME_ENDED', { 
             gameId, 
@@ -607,6 +1086,16 @@ io.on('connection', (socket) => {
             winnerName: winnerName,
             loserName: loserName
           });
+        } else if (game.isAIGame && !moveResult.gameOver) {
+          // AI's turn - trigger AI move after a short delay
+          console.log('Human move completed, triggering AI move. Current player:', game.currentPlayer);
+          console.log('Game isAIGame:', game.isAIGame, 'GameOver:', moveResult.gameOver);
+          setTimeout(() => {
+            console.log('Timeout triggered, calling handleAIMove...');
+            handleAIMove(gameId);
+          }, 500);
+        } else {
+          console.log('AI move not triggered. isAIGame:', game.isAIGame, 'gameOver:', moveResult.gameOver);
         }
       } else {
         console.log('Move rejected:', moveResult.reason, 'for player', playerName, 'at', row, col);
@@ -682,14 +1171,16 @@ io.on('connection', (socket) => {
       const requests = startOverRequests.get(gameId);
       requests.add(socket.id);
       
-      // Notify the other player
-      const otherPlayer = isPlayer1 ? game.player2 : game.player1;
-      otherPlayer.emit('startOverRequested', { 
-        message: `${playerName} wants to start over. Click to confirm.` 
-      });
+      // Notify the other player (only if it's not an AI game)
+      if (!game.isAIGame) {
+        const otherPlayer = isPlayer1 ? game.player2 : game.player1;
+        otherPlayer.emit('startOverRequested', { 
+          message: `${playerName} wants to start over. Click to confirm.` 
+        });
+      }
       
-      // Check if both players want to start over
-      if (requests.size === 2) {
+      // Check if both players want to start over (or if it's an AI game, start over immediately)
+      if (requests.size === 2 || game.isAIGame) {
         // Reset the game
         game.board = game.initializeBoard();
         game.currentPlayer = 'black';
@@ -704,9 +1195,15 @@ io.on('connection', (socket) => {
         
         logGameEvent('GAME_RESTARTED', { gameId });
         
-        // Notify both players
+        // Notify both players (or just human player in AI game)
         const gameState = game.getGameState();
-        broadcastToGame(gameId, 'gameRestarted', gameState);
+        if (game.isAIGame) {
+          // AI game - only send to human player
+          game.player1.emit('gameRestarted', gameState);
+        } else {
+          // Regular game - send to both players
+          broadcastToGame(gameId, 'gameRestarted', gameState);
+        }
       }
     } catch (error) {
       console.error('Start over error:', error);
@@ -861,6 +1358,79 @@ io.on('connection', (socket) => {
       console.error('New game response error:', error);
       socket.emit("newGameError", { 
         message: "Error processing new game response" 
+      });
+    }
+  });
+
+  /**
+   * Handle AI game reset requests
+   * Resets the server-side game state for AI games
+   */
+  socket.on('resetAIGame', (data) => {
+    try {
+      // Check if player has set a username
+      if (!connectedPlayers.has(socket.id)) {
+        socket.emit("usernameRequired", { 
+          message: "Please set your username first" 
+        });
+        return;
+      }
+      
+      const { gameId } = data;
+      if (!gameId) {
+        socket.emit("resetError", { 
+          message: "Invalid game ID" 
+        });
+        return;
+      }
+      
+      const game = games.get(gameId);
+      if (!game) {
+        socket.emit("resetError", { 
+          message: "Game not found" 
+        });
+        return;
+      }
+      
+      // Check if this is an AI game
+      if (!game.isAIGame) {
+        socket.emit("resetError", { 
+          message: "Not an AI game" 
+        });
+        return;
+      }
+      
+      // Check if this player is in the game
+      const isPlayer1 = game.player1 === socket;
+      if (!isPlayer1) {
+        socket.emit("resetError", { 
+          message: "You are not part of this game" 
+        });
+        return;
+      }
+      
+      const playerName = connectedPlayers.get(socket.id);
+      logGameEvent('AI_GAME_RESET_REQUEST', { gameId, playerName });
+      
+      // Reset the game state
+      game.board = game.initializeBoard();
+      game.currentPlayer = 'black';
+      game.winner = null;
+      game.gameOver = false;
+      game.moveCount = 0;
+      game.moveHistory = [];
+      game.lastMoveAt = new Date();
+      
+      logGameEvent('AI_GAME_RESET', { gameId });
+      
+      // Send updated game state to the human player
+      const gameState = game.getGameState();
+      socket.emit('aiGameReset', gameState);
+      
+    } catch (error) {
+      console.error('AI game reset error:', error);
+      socket.emit("resetError", { 
+        message: "Error resetting AI game" 
       });
     }
   });

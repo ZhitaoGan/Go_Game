@@ -341,6 +341,7 @@
         <div id="gameModeSelector">
             <button id="localModeBtn" class="mode-button active" onclick="switchToLocalMode()">Local Play</button>
             <button id="onlineModeBtn" class="mode-button" onclick="switchToOnlineMode()">Online Play</button>
+            <button id="aiModeBtn" class="mode-button" onclick="switchToAIMode()">AI Play</button>
         </div>
         
         <div id="gameInfo">
@@ -421,8 +422,9 @@
         let opponentName = null;        // Opponent's username
         let isWaitingForOpponent = false; // Waiting for opponent to join
         let hasClickedStartOver = false;  // Start over button state
+        let startOverRequested = false;   // Whether opponent has requested start over
         // Note: playerStats variable removed as it's not used
-        let gameMode = 'local';         // Current game mode ('local' or 'online')
+        let gameMode = 'local';         // Current game mode ('local', 'online', or 'ai')
         let isAutoReconnecting = false; // Flag to prevent username modal during auto-reconnection
         
         // ==================== REFRESH DETECTION ====================
@@ -599,15 +601,15 @@
         function setupSocketHandlers() {
             socket.on('connect', () => {
                 console.log('Connected to server:', socket.id);
-                if (gameMode === 'online') {
+                if (gameMode === 'online' || gameMode === 'ai') {
                     // Don't automatically show username form - let the calling code handle it
-                    console.log('Socket connected in online mode');
+                    console.log('Socket connected in', gameMode, 'mode');
                 }
             });
 
             socket.on('connect_error', (error) => {
                 console.log('Connection error:', error.message);
-                if (gameMode === 'online') {
+                if (gameMode === 'online' || gameMode === 'ai') {
                     console.log('Server connection failed, clearing saved game state');
                     clearAllSessionData();
                     showError('Cannot connect to server. Please check if the server is running.');
@@ -616,7 +618,7 @@
 
             socket.on('disconnect', (reason) => {
                 console.log('Disconnected from server:', reason);
-                if (gameMode === 'online') {
+                if (gameMode === 'online' || gameMode === 'ai') {
                     // Check if this is a server shutdown (not just a network issue)
                     if (reason === 'io server disconnect' || reason === 'transport close') {
                         console.log('Server appears to have shut down, clearing saved game state');
@@ -664,6 +666,10 @@
                     console.log('Attempting to reconnect with restored board state:', gameId);
                     updateStatus('Reconnecting to your game with restored board...');
                     socket.emit('reconnectToGame', { gameId: gameId });
+                } else if (gameMode === 'ai') {
+                    updateStatus(`Welcome ${playerName}! Starting AI game...`);
+                    // Join AI game
+                    socket.emit('joinAIGame', { playerName: playerName });
                 } else {
                     updateStatus(`Welcome ${playerName}! Looking for an opponent...`);
                     // Automatically join game after username is accepted
@@ -732,7 +738,11 @@
                 updatePlayerInfo();
                 updateGameStatus();
                 
-                updateStatus(`Game started! You are ${myPlayer.toUpperCase()}`);
+                if (data.isAIGame) {
+                    updateStatus(`AI Game started! You are ${myPlayer.toUpperCase()} vs AI Player`);
+                } else {
+                    updateStatus(`Game started! You are ${myPlayer.toUpperCase()}`);
+                }
                 redrawBoard();
                 
                 // Save game state for reconnection
@@ -794,6 +804,28 @@
                 showGameOverMessage();
             });
 
+            // Handle AI game reset event
+            socket.on('aiGameReset', (data) => {
+                console.log('AI game reset received:', data);
+                // Update client-side state with server data
+                board = data.board;
+                currentPlayer = data.currentPlayer;
+                gameOver = data.gameOver;
+                winner = data.winner;
+                moveCount = data.moveCount;
+                
+                // Update UI
+                updateCurrentPlayer();
+                updatePlayerInfo();
+                updateGameStatus();
+                hideGameOverMessage();
+                
+                // Redraw the board
+                redrawBoard();
+                
+                updateStatus(`New AI game started! You are BLACK vs AI Player`);
+            });
+
             socket.on('opponentLeft', (data) => {
                 console.log('Opponent left:', data.message);
                 updateStatus('Opponent left the game');
@@ -803,6 +835,7 @@
 
             socket.on('startOverRequested', (data) => {
                 console.log('Start over requested:', data.message);
+                startOverRequested = true;
                 updateStartOverButton();
                 showInfo(data.message);
             });
@@ -823,10 +856,10 @@
                     gameOver = data.gameOver;
                 }
                 
-                // Reset the start over button to its initial state
-                const startOverButton = document.getElementById('startOverButton');
-                startOverButton.textContent = 'Start Over';
-                startOverButton.disabled = false;
+                // Reset the start over button state
+                hasClickedStartOver = false;
+                startOverRequested = false;
+                updateStartOverButton();
                 
                 updateStatus(`Game restarted! You are ${myPlayer.toUpperCase()}`);
                 redrawBoard();
@@ -1061,6 +1094,7 @@
             gameMode = 'local';
             document.getElementById('localModeBtn').classList.add('active');
             document.getElementById('onlineModeBtn').classList.remove('active');
+            document.getElementById('aiModeBtn').classList.remove('active');
             document.getElementById('localPlayerInfo').style.display = 'flex';
             document.getElementById('playerProfiles').style.display = 'none';
             hideWaitingMessage();
@@ -1086,6 +1120,7 @@
             gameMode = 'online';
             document.getElementById('onlineModeBtn').classList.add('active');
             document.getElementById('localModeBtn').classList.remove('active');
+            document.getElementById('aiModeBtn').classList.remove('active');
             document.getElementById('localPlayerInfo').style.display = 'none';
             document.getElementById('playerProfiles').style.display = 'flex';
             hideWaitingMessage();
@@ -1172,6 +1207,73 @@
             } catch (error) {
                 console.error('Failed to switch to online mode:', error);
                 showError('Failed to switch to online mode. Please check if the server is running.');
+            }
+        }
+
+        /**
+         * Switch to AI play mode
+         * Creates a game against the AI player
+         */
+        async function switchToAIMode() {
+            gameMode = 'ai';
+            document.getElementById('aiModeBtn').classList.add('active');
+            document.getElementById('localModeBtn').classList.remove('active');
+            document.getElementById('onlineModeBtn').classList.remove('active');
+            document.getElementById('localPlayerInfo').style.display = 'none';
+            document.getElementById('playerProfiles').style.display = 'flex';
+            hideWaitingMessage();
+            hideGameOverMessage();
+            resetGameState();
+            initGame();
+            
+            try {
+                // Initialize socket connection for AI mode
+                if (!socket) {
+                    console.log('Initializing socket for AI mode...');
+                    await initializeSocket();
+                }
+                
+                if (socket && !socket.connected) {
+                    console.log('Connecting socket for AI mode...');
+                    socket.connect();
+                    
+                    // Wait for connection to be established
+                    await new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            reject(new Error('Connection timeout'));
+                        }, 5000);
+                        
+                        socket.on('connect', () => {
+                            clearTimeout(timeout);
+                            resolve();
+                        });
+                        
+                        socket.on('connect_error', (error) => {
+                            clearTimeout(timeout);
+                            reject(error);
+                        });
+                    });
+                }
+                
+                if (socket && socket.connected) {
+                    console.log('Socket connected for AI mode');
+                    // Check if we have a saved username
+                    const userSession = loadUserSession();
+                    if (userSession && userSession.playerName) {
+                        console.log('Using saved username for AI mode:', userSession.playerName);
+                        playerName = userSession.playerName;
+                        socket.emit('setUsername', { username: playerName });
+                    } else {
+                        // Show username form for AI mode
+                        showUsernameForm();
+                    }
+                } else {
+                    console.error('Socket not connected after initialization');
+                    showError('Cannot connect to server for AI mode. Please check if the server is running.');
+                }
+            } catch (error) {
+                console.error('Failed to switch to AI mode:', error);
+                showError('Failed to switch to AI mode. Please check if the server is running.');
             }
         }
         
@@ -1345,8 +1447,9 @@
                 return false;
             }
             
-            if (gameMode === 'online') {
+            if (gameMode === 'online' || gameMode === 'ai') {
                 // Send move to server for validation
+                console.log('Sending move to server:', { gameId, row, col, gameMode });
                 socket.emit('makeMove', {
                     gameId: gameId,
                     row: row,
@@ -1484,11 +1587,15 @@
                     gameStatus.style.color = '#666';
                 }
             } else {
-                if (gameMode === 'online') {
+                if (gameMode === 'online' || gameMode === 'ai') {
                     if (isMyTurn()) {
                         gameStatus.textContent = `Your turn (${myPlayer.toUpperCase()}) - Click to make a move`;
                     } else {
-                        gameStatus.textContent = `Waiting for ${opponentName} to make a move...`;
+                        if (gameMode === 'ai') {
+                            gameStatus.textContent = `AI Player is thinking...`;
+                        } else {
+                            gameStatus.textContent = `Waiting for ${opponentName} to make a move...`;
+                        }
                     }
                 } else {
                     gameStatus.textContent = `Click on the board to make your move`;
@@ -1529,7 +1636,7 @@
                 } else if (gameMode === 'online' && winner === 'disconnect') {
                     winnerText.textContent = `😞 Opponent Left - Game Finished`;
                 } else if (gameMode === 'online') {
-                    winnerText.textContent = `😞 ${opponentName} WINS!`;
+                    winnerText.textContent = `😞 You lose!`;
                 } else {
                     winnerText.textContent = `${winner.toUpperCase()} WINS!`;
                 }
@@ -1560,6 +1667,21 @@
             if (gameMode === 'local') {
                 // Local mode: restart the game
                 switchToLocalMode();
+            } else if (gameMode === 'ai') {
+                // AI mode: reset the current game
+                if (gameId && socket && socket.connected) {
+                    console.log('Resetting AI game');
+                    // Send reset request to server
+                    socket.emit('resetAIGame', { gameId: gameId });
+                } else {
+                    // No active game, start fresh
+                    if (playerName) {
+                        updateStatus(`Starting new AI game...`);
+                        socket.emit('joinAIGame', { playerName: playerName });
+                    } else {
+                        showUsernameForm();
+                    }
+                }
             } else {
                 // Online mode: check if we're in an active game
                 if (gameId && socket && socket.connected && !gameOver) {
@@ -1608,6 +1730,7 @@
             gameOver = false;
             winner = null;
             hasClickedStartOver = false;
+            startOverRequested = false;
             currentPlayer = 'black';
         }
         
@@ -1681,9 +1804,13 @@
             if (hasClickedStartOver) {
                 startOverButton.textContent = `Waiting for ${opponentName} to get ready...`;
                 startOverButton.disabled = true;
-            } else {
+            } else if (startOverRequested) {
                 startOverButton.textContent = 'Opponent wants to start over - Click to confirm';
+                startOverButton.disabled = false;  // Enable button for confirmation
                 updateStatus('Waiting for opponent to get ready...');
+            } else {
+                startOverButton.textContent = 'Start Over';
+                startOverButton.disabled = false;
             }
         }
 
@@ -1796,40 +1923,43 @@
 
 
         function handleStartOverClick() {
-            if (gameMode === 'local') {
-                // For local mode, just restart the game
+            if (gameMode === 'local' || gameMode === 'ai') {
+                // For local mode and AI mode, just restart the game
                 hideGameOverMessage();
-                restartGame();
+                if (gameMode === 'ai') {
+                    // For AI mode, reset the game state
+                    board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+                    currentPlayer = 'black';
+                    gameOver = false;
+                    winner = null;
+                    moveCount = 0;
+                    
+                    // Update UI
+                    updateCurrentPlayer();
+                    updatePlayerInfo();
+                    updateGameStatus();
+                    
+                    // Redraw the board
+                    redrawBoard();
+                    
+                    updateStatus(`Game restarted! You are BLACK vs AI Player`);
+                } else {
+                    restartGame();
+                }
             } else {
-                // For online mode, start a new game and wait for opponent
-                console.log('Start over clicked - starting new game and waiting for opponent');
-                
-                // Clear the current game state
-                clearGameState();
-                
-                // Reset game variables
-                gameId = null;
-                myPlayer = null;
-                opponentName = null;
-                isWaitingForOpponent = false;
-                hasClickedStartOver = false;
-                
-                // Hide game over message
-                hideGameOverMessage();
-                
-                // Reset the board
-                resetGameState();
-                initGame();
-                
-                // Show new game info
-                showNewGameInfo();
-                
-                // Update status
-                updateStatus(`Welcome ${playerName}! Looking for an opponent...`);
-                
-                // Automatically join the waiting queue
-                if (socket && socket.connected && playerName) {
-                    socket.emit('joinGame', { playerName: playerName });
+                // For online mode, handle start over request/confirmation flow
+                if (startOverRequested) {
+                    // This player is confirming the opponent's start over request
+                    console.log('Confirming start over request');
+                    hasClickedStartOver = true;
+                    updateStartOverButton();
+                    socket.emit('requestStartOver', { gameId: gameId });
+                } else {
+                    // This player is initiating a start over request
+                    console.log('Initiating start over request');
+                    hasClickedStartOver = true;
+                    updateStartOverButton();
+                    socket.emit('requestStartOver', { gameId: gameId });
                 }
             }
         }
