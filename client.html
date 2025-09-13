@@ -1085,12 +1085,55 @@
             });
         }
         
+        // ==================== SOCKET MANAGEMENT ====================
+        /**
+         * Cleanly disconnect and reset socket connection
+         * Used when switching between modes to ensure clean state
+         */
+        function resetSocketConnection() {
+            if (socket) {
+                if (socket.connected) {
+                    socket.disconnect();
+                }
+                socket = null;
+            }
+        }
+        
+        /**
+         * Reset all game variables to initial state
+         * Used when switching between modes
+         */
+        function resetAllGameVariables() {
+            // Reset core game state
+            gameOver = false;
+            winner = null;
+            hasClickedStartOver = false;
+            startOverRequested = false;
+            currentPlayer = 'black';
+            
+            // Reset online game variables
+            gameId = null;
+            myPlayer = null;
+            playerName = null;
+            opponentName = null;
+            isWaitingForOpponent = false;
+            isAutoReconnecting = false;
+            
+            // Clear all session data
+            clearAllSessionData();
+        }
+
         // ==================== MODE SWITCHING ====================
         /**
          * Switch to local play mode
          * Disconnects from server and resets to local game state
          */
         function switchToLocalMode() {
+            // Reset everything for clean local mode start
+            resetSocketConnection();
+            resetAllGameVariables();
+            
+            // Set up local mode UI
             gameMode = 'local';
             document.getElementById('localModeBtn').classList.add('active');
             document.getElementById('onlineModeBtn').classList.remove('active');
@@ -1100,23 +1143,21 @@
             hideWaitingMessage();
             hideGameOverMessage();
             hideNewGameInfo();
-            resetGameState();
+            
+            // Initialize fresh local game
             initGame();
-            
-            // Clear saved game state when switching to local mode
-            clearGameState();
-            
-            // Disconnect socket when switching to local mode
-            if (socket && socket.connected) {
-                socket.disconnect();
-            }
         }
         
         /**
          * Switch to online play mode
-         * Initializes socket connection and attempts to restore saved state
+         * Always starts fresh with new socket connection
          */
         async function switchToOnlineMode() {
+            // Reset everything for clean online mode start
+            resetSocketConnection();
+            resetAllGameVariables();
+            
+            // Set up online mode UI
             gameMode = 'online';
             document.getElementById('onlineModeBtn').classList.add('active');
             document.getElementById('localModeBtn').classList.remove('active');
@@ -1125,84 +1166,28 @@
             document.getElementById('playerProfiles').style.display = 'flex';
             hideWaitingMessage();
             hideGameOverMessage();
-            resetGameState();
+            
+            // Initialize fresh game
             initGame();
             
             try {
-                // Only connect to socket when switching to online mode
-                if (!socket) {
-                    await initializeSocket();
-                }
+                // Always create new socket connection for online mode
+                await initializeSocket();
                 
                 if (socket && !socket.connected) {
                     socket.connect();
                 }
                 
                 if (socket && socket.connected) {
-                    // Add a small delay to ensure socket is fully ready
-                    setTimeout(() => {
-                        // Check for saved game state and attempt reconnection
-                        const savedState = loadGameState();
-                        const userSession = loadUserSession();
-                        
-                        if (savedState && savedState.mode === 'online' && savedState.playerName && savedState.gameId) {
-                            console.log('Found saved game state, attempting reconnection...', savedState);
-                            // Don't set isAutoReconnecting here as it's already set in the load event
-                            playerName = savedState.playerName;
-                            gameId = savedState.gameId;
-                            myPlayer = savedState.myPlayer;
-                            opponentName = savedState.opponentName;
-                            
-                            console.log('Setting up reconnection with:', { playerName, gameId, myPlayer, opponentName });
-                            // Set username and attempt reconnection
-                            socket.emit('setUsername', { username: playerName });
-                            // The usernameAccepted handler will trigger the reconnection attempt
-                        } else if (userSession && userSession.playerName) {
-                            console.log('Found saved user session, using saved username:', userSession.playerName);
-                            // Use saved username and attempt to join a new game
-                            playerName = userSession.playerName;
-                            socket.emit('setUsername', { username: playerName });
-                        } else {
-                            // No saved state, show username form (only if not auto-reconnecting)
-                            if (!isAutoReconnecting) {
-                                console.log('No saved session found, showing username form');
-                                showUsernameForm();
-                            } else {
-                                console.log('Auto-reconnecting, not showing username form');
-                            }
-                        }
-                    }, 100); // Small delay to ensure socket is fully ready
+                    // Show username form for fresh online game
+                    console.log('Switching to online mode, showing username form');
+                    showUsernameForm();
                 } else {
-                    // Socket not connected, wait for connection
-                    if (socket) {
-                        socket.on('connect', () => {
-                            console.log('Socket connected after waiting, proceeding with online mode setup');
-                            // Check for saved game state and attempt reconnection
-                            const savedState = loadGameState();
-                            const userSession = loadUserSession();
-                            
-                            if (savedState && savedState.mode === 'online' && savedState.playerName && savedState.gameId) {
-                                console.log('Found saved game state, attempting reconnection...', savedState);
-                                playerName = savedState.playerName;
-                                gameId = savedState.gameId;
-                                myPlayer = savedState.myPlayer;
-                                opponentName = savedState.opponentName;
-                                
-                                console.log('Setting up reconnection with:', { playerName, gameId, myPlayer, opponentName });
-                                socket.emit('setUsername', { username: playerName });
-                            } else if (userSession && userSession.playerName) {
-                                console.log('Found saved user session, using saved username:', userSession.playerName);
-                                playerName = userSession.playerName;
-                                socket.emit('setUsername', { username: playerName });
-                            } else {
-                                // No saved state, show username form
-                                if (!isAutoReconnecting) {
-                                    console.log('No saved session found, showing username form');
-                                    showUsernameForm();
-                                }
-                            }
-                        });
-                    }
+                    // Wait for connection
+                    socket.on('connect', () => {
+                        console.log('Socket connected, showing username form for online mode');
+                        showUsernameForm();
+                    });
                 }
             } catch (error) {
                 console.error('Failed to switch to online mode:', error);
@@ -1212,9 +1197,14 @@
 
         /**
          * Switch to AI play mode
-         * Creates a game against the AI player
+         * Always starts fresh with new socket connection
          */
         async function switchToAIMode() {
+            // Reset everything for clean AI mode start
+            resetSocketConnection();
+            resetAllGameVariables();
+            
+            // Set up AI mode UI
             gameMode = 'ai';
             document.getElementById('aiModeBtn').classList.add('active');
             document.getElementById('localModeBtn').classList.remove('active');
@@ -1223,18 +1213,15 @@
             document.getElementById('playerProfiles').style.display = 'flex';
             hideWaitingMessage();
             hideGameOverMessage();
-            resetGameState();
+            
+            // Initialize fresh game
             initGame();
             
             try {
-                // Initialize socket connection for AI mode
-                if (!socket) {
-                    console.log('Initializing socket for AI mode...');
-                    await initializeSocket();
-                }
+                // Always create new socket connection for AI mode
+                await initializeSocket();
                 
                 if (socket && !socket.connected) {
-                    console.log('Connecting socket for AI mode...');
                     socket.connect();
                     
                     // Wait for connection to be established
@@ -1256,17 +1243,9 @@
                 }
                 
                 if (socket && socket.connected) {
-                    console.log('Socket connected for AI mode');
-                    // Check if we have a saved username
-                    const userSession = loadUserSession();
-                    if (userSession && userSession.playerName) {
-                        console.log('Using saved username for AI mode:', userSession.playerName);
-                        playerName = userSession.playerName;
-                        socket.emit('setUsername', { username: playerName });
-                    } else {
-                        // Show username form for AI mode
-                        showUsernameForm();
-                    }
+                    // Show username form for fresh AI game
+                    console.log('Switching to AI mode, showing username form');
+                    showUsernameForm();
                 } else {
                     console.error('Socket not connected after initialization');
                     showError('Cannot connect to server for AI mode. Please check if the server is running.');
